@@ -65,10 +65,11 @@ export default function HomeScreen() {
     return Intl.DateTimeFormat().resolvedOptions().timeZone.split('/').pop() || 'Local';
   };
 
-  // Handle quick action presses
+  // Handle quick action presses - navigate to assistant with emergency context
   const handleEmergency = (type: 'lost' | 'injury' | 'wildlife') => {
     useDeviceStore.getState().setEmergencyMode(type);
-    router.push('/(tabs)/emergency' as any);
+    // Navigate to assistant - the emergency mode will be picked up by context injection
+    router.push('/(tabs)/assistant' as any);
   };
 
   const handleAskAI = () => {

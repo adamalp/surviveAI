@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -19,6 +19,11 @@ type FlowStep = 'main' | 'lost' | 'lost-danger' | 'injury' | 'wildlife';
 export default function EmergencyScreen() {
   const { colors, spacing } = useTheme();
   const { emergency, setEmergencyMode, clearEmergency } = useDeviceStore();
+
+  // Redirect to assistant - this screen is deprecated
+  useEffect(() => {
+    router.replace('/(tabs)/assistant' as any);
+  }, []);
 
   const [currentStep, setCurrentStep] = useState<FlowStep>(
     emergency.type ? emergency.type as FlowStep : 'main'

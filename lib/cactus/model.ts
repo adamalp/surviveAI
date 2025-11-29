@@ -68,7 +68,7 @@ export const CACTUS_MODELS: Record<string, ModelConfig> = {
     quality: 4,
     speed: 3,
     supportsVision: false,
-    supportsToolCalling: true, // Qwen3 1.7B has good instruction following
+    supportsToolCalling: false, // Disabled for better UX - non-streaming tool detection causes delay
   },
   'smollm2-1.7': {
     id: 'smollm2-1.7',
@@ -78,7 +78,7 @@ export const CACTUS_MODELS: Record<string, ModelConfig> = {
     quality: 4,
     speed: 3,
     supportsVision: false,
-    supportsToolCalling: true, // SmolLM2 1.7B has good instruction following
+    supportsToolCalling: false, // Disabled for better UX - non-streaming tool detection causes delay
   },
 };
 

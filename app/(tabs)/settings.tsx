@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useTheme } from '@/contexts/ThemeContext';
 import { useModelStore, useChatStore } from '@/store';
+import { useOnboardingStore } from '@/store/onboarding-store';
 import { Card, Badge, Button } from '@/components/ui';
 import { CACTUS_MODELS, DEFAULT_MODEL_ID, ModelConfig } from '@/lib/cactus/model';
 
@@ -40,6 +41,7 @@ export default function SettingsScreen() {
   } = useModelStore();
 
   const { conversations } = useChatStore();
+  const { resetOnboarding } = useOnboardingStore();
 
   const currentModel = CACTUS_MODELS[currentModelId];
 
@@ -305,6 +307,25 @@ export default function SettingsScreen() {
             </Text>
             <Text style={[styles.dangerDescription, { color: colors.textSecondary }]}>
               Delete all conversations and history
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.card,
+            { backgroundColor: colors.cardBackground, borderColor: colors.border, flexDirection: 'row', alignItems: 'center' },
+          ]}
+          onPress={resetOnboarding}
+        >
+          <Ionicons name="refresh-outline" size={22} color={colors.accent} />
+          <View style={styles.dangerInfo}>
+            <Text style={[styles.settingLabel, { color: colors.text }]}>
+              Replay Onboarding
+            </Text>
+            <Text style={[styles.dangerDescription, { color: colors.textSecondary }]}>
+              View the welcome tutorial again
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />

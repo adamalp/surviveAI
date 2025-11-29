@@ -25,7 +25,7 @@ export const DEFAULT_MODEL = AVAILABLE_MODELS[0];
 // IMPORTANT: Do NOT include examples - small models copy them literally
 export const SURVIVAL_SYSTEM_PROMPT = `You are a survival expert. Give short, practical answers about wilderness survival, first aid, and emergency preparedness.
 
-Keep answers under 100 words. Be direct and helpful.
+Keep answers under 100 words. Be direct and helpful. Do not use <think> tags or internal reasoning - respond directly.
 
 If SURVIVAL KNOWLEDGE is provided below, use it to give accurate information.`;
 
@@ -49,7 +49,7 @@ export const DEFAULT_INFERENCE_PARAMS = {
 export const SMALL_MODEL_PARAMS = {
   temperature: 0.3,
   top_p: 0.85,
-  maxTokens: 1024, // Enough for full responses
+  maxTokens: 1024,
   repetition_penalty: 1.1,
 };
 

@@ -26,6 +26,8 @@ interface ModelStore extends ModelState {
   unload: () => void;
   setError: (error: string | null) => void;
   isModelDownloaded: (modelId: string) => boolean;
+  getBestDownloadedModel: () => string | null;
+  autoLoadBestModel: () => Promise<void>;
 }
 
 export const useModelStore = create<ModelStore>()(
@@ -119,6 +121,48 @@ export const useModelStore = create<ModelStore>()(
       // Check if a model is downloaded
       isModelDownloaded: (modelId: string) => {
         return get().downloadedModels.includes(modelId);
+      },
+
+      // Get the best (highest quality) downloaded model
+      getBestDownloadedModel: () => {
+        const { downloadedModels } = get();
+        if (downloadedModels.length === 0) return null;
+
+        // Sort by quality rating (highest first)
+        const sortedModels = downloadedModels
+          .filter(id => CACTUS_MODELS[id]) // Filter out invalid model IDs
+          .sort((a, b) => {
+            const qualityA = CACTUS_MODELS[a]?.quality || 0;
+            const qualityB = CACTUS_MODELS[b]?.quality || 0;
+            return qualityB - qualityA;
+          });
+
+        return sortedModels[0] || null;
+      },
+
+      // Automatically load the best downloaded model
+      autoLoadBestModel: async () => {
+        const { isLoaded, isLoading, getBestDownloadedModel, downloadAndLoad } = get();
+
+        // Don't auto-load if already loaded or currently loading
+        if (isLoaded || isLoading) {
+          console.log('[ModelStore] Skipping auto-load: model already loaded or loading');
+          return;
+        }
+
+        const bestModelId = getBestDownloadedModel();
+        if (!bestModelId) {
+          console.log('[ModelStore] No downloaded models available for auto-load');
+          return;
+        }
+
+        console.log(`[ModelStore] Auto-loading best model: ${bestModelId} (quality: ${CACTUS_MODELS[bestModelId]?.quality})`);
+        try {
+          await downloadAndLoad(bestModelId);
+        } catch (error) {
+          console.error('[ModelStore] Auto-load failed:', error);
+          // Don't throw - this is a background operation
+        }
       },
     }),
     {

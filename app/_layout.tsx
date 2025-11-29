@@ -8,6 +8,9 @@ import 'react-native-reanimated';
 
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 import { colors } from '@/constants/theme';
+import { useOnboardingStore } from '@/store/onboarding-store';
+import { useModelStore } from '@/store/model-store';
+import { Onboarding } from '@/components/Onboarding';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -78,6 +81,34 @@ const TacticalLightTheme = {
 
 function RootLayoutNav() {
   const { isDark } = useTheme();
+  const { hasCompletedOnboarding, isLoading, loadOnboardingStatus } = useOnboardingStore();
+  const { autoLoadBestModel } = useModelStore();
+
+  // Load onboarding status on mount
+  useEffect(() => {
+    loadOnboardingStatus();
+  }, []);
+
+  // Auto-load the best downloaded model when app starts (after onboarding)
+  useEffect(() => {
+    if (hasCompletedOnboarding && !isLoading) {
+      autoLoadBestModel();
+    }
+  }, [hasCompletedOnboarding, isLoading]);
+
+  // Show nothing while loading onboarding status
+  if (isLoading) {
+    return null;
+  }
+
+  // Show onboarding if not completed
+  if (!hasCompletedOnboarding) {
+    return (
+      <NavigationThemeProvider value={isDark ? TacticalDarkTheme : TacticalLightTheme}>
+        <Onboarding />
+      </NavigationThemeProvider>
+    );
+  }
 
   return (
     <NavigationThemeProvider value={isDark ? TacticalDarkTheme : TacticalLightTheme}>

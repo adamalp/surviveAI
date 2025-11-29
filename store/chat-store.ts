@@ -23,6 +23,7 @@ interface ChatStore {
   messages: Record<string, ChatMessage[]>; // keyed by conversationId
   activeConversationId: string | null;
   isGenerating: boolean;
+  isReasoning: boolean; // True when model is in <think> block
   currentResponse: string;
   error: string | null;
 
@@ -92,6 +93,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   messages: {},
   activeConversationId: null,
   isGenerating: false,
+  isReasoning: false,
   currentResponse: '',
   error: null,
 
@@ -215,6 +217,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           : c
       ),
       isGenerating: true,
+      isReasoning: false,
       currentResponse: '',
       error: null,
     }));
@@ -235,12 +238,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         (token) => {
           rawResponse += token;
 
+          // Check if we're inside a think block
+          const reasoning = isInsideThinkBlock(rawResponse);
+
           // Only show cleaned, non-thinking content during streaming
           const cleaned = cleanResponse(rawResponse);
 
-          // Only update if we have visible content and not inside think block
-          if (cleaned && !isInsideThinkBlock(rawResponse)) {
-            set({ currentResponse: cleaned });
+          // Update reasoning state and visible content
+          if (reasoning) {
+            set({ isReasoning: true });
+          } else if (cleaned) {
+            set({ currentResponse: cleaned, isReasoning: false });
           }
         },
         context
@@ -288,6 +296,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               : c
           ),
           isGenerating: false,
+          isReasoning: false,
           currentResponse: '',
         }));
 
@@ -297,13 +306,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         // No useful response
         set({
           isGenerating: false,
+          isReasoning: false,
           currentResponse: '',
           error: 'No response generated. Please try again.',
         });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to generate response';
-      set({ isGenerating: false, error: message, currentResponse: '' });
+      set({ isGenerating: false, isReasoning: false, error: message, currentResponse: '' });
     }
   },
 

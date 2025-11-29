@@ -1,32 +1,38 @@
-import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import {
   StyleSheet,
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  Image,
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Ionicons } from '@expo/vector-icons';
-import Markdown from 'react-native-markdown-display';
 import * as ImagePicker from 'expo-image-picker';
 
 import { useTheme } from '@/contexts/ThemeContext';
 import { useChatStore, useDeviceStore, useModelStore } from '@/store';
 import { useSTTStore } from '@/store/stt-store';
-import { ChatMessage, Conversation } from '@/types';
 import { CACTUS_MODELS } from '@/lib/cactus/model';
 import { CONFIG } from '@/constants/config';
-import { MessageBubble } from '@/components/chat';
+import {
+  MessageBubble,
+  ConversationListModal,
+  ChatInput,
+  EmptyState,
+  StreamingBubble,
+} from '@/components/chat';
+
+// Emergency mode display info
+const EMERGENCY_INFO: Record<string, { title: string; icon: string }> = {
+  lost: { title: "I'm Lost", icon: 'compass' },
+  injury: { title: 'Injury / Medical', icon: 'medkit' },
+  wildlife: { title: 'Wildlife Encounter', icon: 'paw' },
+};
 
 export default function AssistantScreen() {
   const { colors, isDark } = useTheme();
@@ -40,6 +46,7 @@ export default function AssistantScreen() {
     conversations,
     activeConversationId,
     isGenerating,
+    isReasoning,
     currentResponse,
     error,
     sendMessage,
@@ -48,14 +55,9 @@ export default function AssistantScreen() {
     deleteConversation,
   } = useChatStore();
 
-  const { getDeviceContext, updateLocation, updateBattery } = useDeviceStore();
-  const { currentModelId, isLoaded } = useModelStore();
-  const {
-    isRecording,
-    isTranscribing,
-    startRecording,
-    stopRecording,
-  } = useSTTStore();
+  const { getDeviceContext, updateLocation, updateBattery, emergency, clearEmergency } = useDeviceStore();
+  const { currentModelId } = useModelStore();
+  const { isRecording, isTranscribing, startRecording, stopRecording } = useSTTStore();
 
   // Check if current model supports vision
   const currentModel = CACTUS_MODELS[currentModelId];
@@ -63,11 +65,9 @@ export default function AssistantScreen() {
 
   // Initialize device data and conversation on mount
   useEffect(() => {
-    // Ensure we have device context for AI
     updateLocation();
     updateBattery();
 
-    // Create conversation if needed
     if (!activeConversationId || !conversations.find(c => c.id === activeConversationId)) {
       const id = createConversation();
       setActiveConversation(id);
@@ -77,15 +77,31 @@ export default function AssistantScreen() {
   // Get current conversation's messages
   const conversationMessages = activeConversationId ? messages[activeConversationId] || [] : [];
 
-  // Scroll to bottom when new messages arrive or response updates
+  // Scroll to bottom when new messages arrive
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }, CONFIG.SCROLL_TO_BOTTOM_DELAY);
-
     return () => clearTimeout(timeoutId);
   }, [conversationMessages, currentResponse]);
 
+  // Get current conversation object
+  const currentConversation = conversations.find(c => c.id === activeConversationId);
+
+  // Get conversation title
+  const getConversationTitle = (): string => {
+    if (!currentConversation) return 'New Conversation';
+    const convMessages = messages[currentConversation.id] || [];
+    const firstUserMessage = convMessages.find(m => m.role === 'user');
+    if (firstUserMessage) {
+      return firstUserMessage.content.length > 40
+        ? firstUserMessage.content.substring(0, 40) + '...'
+        : firstUserMessage.content;
+    }
+    return 'New Conversation';
+  };
+
+  // Handlers
   const handleSend = async () => {
     if ((!input.trim() && !selectedImage) || isGenerating) return;
 
@@ -95,12 +111,10 @@ export default function AssistantScreen() {
     setInput('');
     setSelectedImage(null);
 
-    // Get device context for AI injection
     const context = getDeviceContext();
     await sendMessage(message, context, images);
   };
 
-  // Pick image from gallery
   const pickImage = async () => {
     if (!supportsVision) {
       Alert.alert(
@@ -129,40 +143,6 @@ export default function AssistantScreen() {
     }
   };
 
-  // Take photo with camera
-  const takePhoto = async () => {
-    if (!supportsVision) {
-      Alert.alert(
-        'Vision Not Supported',
-        'The current model does not support image analysis. Please select the "LFM2 Vision 450M" model in Settings to use this feature.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Please allow camera access to use this feature.');
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      quality: 0.8,
-      base64: false,
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      setSelectedImage(result.assets[0].uri);
-    }
-  };
-
-  // Clear selected image
-  const clearImage = () => {
-    setSelectedImage(null);
-  };
-
-  // Handle voice input toggle
   const handleVoiceInput = async () => {
     if (isGenerating) return;
 
@@ -193,54 +173,22 @@ export default function AssistantScreen() {
 
   const handleDeleteConversation = (id: string) => {
     deleteConversation(id);
-    // If we deleted the active conversation, create a new one
     if (id === activeConversationId) {
       const newId = createConversation();
       setActiveConversation(newId);
     }
   };
 
-  // Get current conversation object
-  const currentConversation = conversations.find(c => c.id === activeConversationId);
-
-  // Get conversation title (first message or default)
-  const getConversationTitle = (conv: Conversation): string => {
-    const convMessages = messages[conv.id] || [];
-    const firstUserMessage = convMessages.find(m => m.role === 'user');
-    if (firstUserMessage) {
-      // Truncate to 40 characters
-      return firstUserMessage.content.length > 40
-        ? firstUserMessage.content.substring(0, 40) + '...'
-        : firstUserMessage.content;
-    }
-    return 'New Conversation';
-  };
-
-  // Format date for display
-  const formatDate = (timestamp: number): string => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    return date.toLocaleDateString();
-  };
-
-  // Memoize suggested prompts to prevent recreation on every render
-  const suggestedPrompts = useMemo(() => [
-    'How do I purify water in the wilderness?',
-    'What are the signs of hypothermia?',
-    'How do I build an emergency shelter?',
-    'What should I do if I get lost?',
-  ], []);
-
-  // Memoize markdown styles to prevent StyleSheet.create on every render
+  // Memoize markdown styles
   const markdownStyles = useMemo(
     () => getMarkdownStyles(colors, isDark),
     [colors, isDark]
   );
+
+  // Get emergency color
+  const getEmergencyColor = (type: string) => {
+    return type === 'wildlife' ? colors.warning : colors.danger;
+  };
 
   return (
     <SafeAreaView
@@ -248,94 +196,50 @@ export default function AssistantScreen() {
       edges={[]}
     >
       {/* Conversation Header */}
-      <View style={[styles.conversationHeader, { backgroundColor: colors.backgroundSecondary, borderBottomColor: colors.border }]}>
+      <View style={[styles.header, { backgroundColor: colors.backgroundSecondary }]}>
         <TouchableOpacity
-          style={[styles.conversationSelector, { backgroundColor: colors.backgroundTertiary, borderColor: colors.border }]}
+          style={[styles.selector, { backgroundColor: colors.backgroundTertiary }]}
           onPress={() => setShowConversationList(true)}
         >
           <FontAwesome name="comments-o" size={16} color={colors.accent} />
-          <Text style={[styles.conversationTitle, { color: colors.text }]} numberOfLines={1}>
-            {currentConversation ? getConversationTitle(currentConversation) : 'New Conversation'}
+          <Text style={[styles.selectorText, { color: colors.text }]} numberOfLines={1}>
+            {getConversationTitle()}
           </Text>
           <FontAwesome name="chevron-down" size={12} color={colors.textSecondary} />
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.headerNewChatButton, { backgroundColor: colors.accent }]}
+          style={[styles.newChatButton, { backgroundColor: colors.accent }]}
           onPress={handleNewChat}
         >
           <FontAwesome name="plus" size={14} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
-      {/* Conversation List Modal */}
-      <Modal
-        visible={showConversationList}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowConversationList(false)}
-      >
-        <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]}>
-          <View style={[styles.modalHeader, { backgroundColor: colors.backgroundSecondary, borderBottomColor: colors.border }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Conversations</Text>
-            <TouchableOpacity
-              style={[styles.modalCloseButton, { backgroundColor: colors.backgroundTertiary }]}
-              onPress={() => setShowConversationList(false)}
-            >
-              <FontAwesome name="times" size={18} color={colors.text} />
-            </TouchableOpacity>
+      {/* Emergency Mode Banner */}
+      {emergency.type && EMERGENCY_INFO[emergency.type] && (
+        <View style={[styles.emergencyBanner, { backgroundColor: getEmergencyColor(emergency.type) }]}>
+          <View style={styles.emergencyContent}>
+            <Ionicons name={EMERGENCY_INFO[emergency.type].icon as any} size={20} color="#FFFFFF" />
+            <Text style={styles.emergencyText}>{EMERGENCY_INFO[emergency.type].title}</Text>
           </View>
-
-          <TouchableOpacity
-            style={[styles.newConversationButton, { backgroundColor: colors.accent }]}
-            onPress={handleNewChat}
-          >
-            <FontAwesome name="plus" size={16} color="#FFFFFF" />
-            <Text style={styles.newConversationText}>New Conversation</Text>
+          <TouchableOpacity style={styles.emergencyDismiss} onPress={clearEmergency}>
+            <Ionicons name="close" size={18} color="#FFFFFF" />
           </TouchableOpacity>
+        </View>
+      )}
 
-          <ScrollView style={styles.conversationList}>
-            {conversations.length === 0 ? (
-              <View style={styles.emptyConversations}>
-                <FontAwesome name="comments-o" size={40} color={colors.textMuted} />
-                <Text style={[styles.emptyConversationsText, { color: colors.textSecondary }]}>
-                  No conversations yet
-                </Text>
-              </View>
-            ) : (
-              conversations
-                .sort((a, b) => b.updatedAt - a.updatedAt)
-                .map((conv) => (
-                  <TouchableOpacity
-                    key={conv.id}
-                    style={[
-                      styles.conversationItem,
-                      {
-                        backgroundColor: conv.id === activeConversationId ? colors.backgroundTertiary : colors.cardBackground,
-                        borderColor: conv.id === activeConversationId ? colors.accent : colors.border,
-                      },
-                    ]}
-                    onPress={() => handleSelectConversation(conv.id)}
-                  >
-                    <View style={styles.conversationItemContent}>
-                      <Text style={[styles.conversationItemTitle, { color: colors.text }]} numberOfLines={2}>
-                        {getConversationTitle(conv)}
-                      </Text>
-                      <Text style={[styles.conversationItemDate, { color: colors.textMuted }]}>
-                        {formatDate(conv.updatedAt)}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.deleteButton}
-                      onPress={() => handleDeleteConversation(conv.id)}
-                    >
-                      <FontAwesome name="trash-o" size={16} color={colors.danger} />
-                    </TouchableOpacity>
-                  </TouchableOpacity>
-                ))
-            )}
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
+      {/* Conversation List Modal */}
+      <ConversationListModal
+        visible={showConversationList}
+        onClose={() => setShowConversationList(false)}
+        conversations={conversations}
+        messages={messages}
+        activeConversationId={activeConversationId}
+        onSelectConversation={handleSelectConversation}
+        onDeleteConversation={handleDeleteConversation}
+        onNewChat={handleNewChat}
+        colors={colors}
+      />
 
       <KeyboardAvoidingView
         style={styles.keyboardAvoid}
@@ -350,38 +254,11 @@ export default function AssistantScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {conversationMessages.length === 0 && !isGenerating ? (
-            <View style={styles.emptyContainer}>
-              <View
-                style={[
-                  styles.emptyIcon,
-                  { backgroundColor: colors.backgroundTertiary, borderColor: colors.border },
-                ]}
-              >
-                <FontAwesome name="leaf" size={32} color={colors.accent} />
-              </View>
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>
-                Survival Assistant
-              </Text>
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                Ask me anything about survival, first aid, navigation, or emergency preparedness.
-              </Text>
-              <View style={styles.suggestionsContainer}>
-                {suggestedPrompts.map((prompt, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={[
-                      styles.suggestion,
-                      { backgroundColor: colors.cardBackground, borderColor: colors.border },
-                    ]}
-                    onPress={() => setInput(prompt)}
-                  >
-                    <Text style={[styles.suggestionText, { color: colors.accent }]}>
-                      {prompt}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
+            <EmptyState
+              emergencyType={emergency.type}
+              onSelectPrompt={setInput}
+              colors={colors}
+            />
           ) : (
             <>
               {conversationMessages.map((msg) => (
@@ -394,28 +271,12 @@ export default function AssistantScreen() {
                 />
               ))}
 
-              {/* Streaming response - use plain Text during streaming to avoid markdown parsing issues */}
               {isGenerating && (
-                <View
-                  style={[
-                    styles.messageBubble,
-                    styles.assistantBubble,
-                    { backgroundColor: colors.cardBackground, borderColor: colors.border },
-                  ]}
-                >
-                  {currentResponse ? (
-                    <Text style={[styles.streamingText, { color: colors.text }]}>
-                      {currentResponse}
-                    </Text>
-                  ) : (
-                    <View style={styles.thinkingContainer}>
-                      <ActivityIndicator size="small" color={colors.accent} />
-                      <Text style={[styles.thinkingText, { color: colors.textSecondary }]}>
-                        Thinking...
-                      </Text>
-                    </View>
-                  )}
-                </View>
+                <StreamingBubble
+                  currentResponse={currentResponse}
+                  isReasoning={isReasoning}
+                  colors={colors}
+                />
               )}
             </>
           )}
@@ -423,109 +284,26 @@ export default function AssistantScreen() {
 
         {/* Error display */}
         {error && (
-          <View
-            style={[
-              styles.errorContainer,
-              { backgroundColor: colors.dangerBackground, borderColor: colors.danger },
-            ]}
-          >
+          <View style={[styles.errorContainer, { backgroundColor: colors.dangerBackground, borderColor: colors.danger }]}>
             <FontAwesome name="exclamation-circle" size={14} color={colors.danger} />
             <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
           </View>
         )}
 
-        {/* Image Preview */}
-        {selectedImage && (
-          <View style={[styles.imagePreviewContainer, { backgroundColor: colors.backgroundSecondary }]}>
-            <Image source={{ uri: selectedImage }} style={styles.imagePreview} resizeMode="cover" />
-            <TouchableOpacity
-              style={[styles.removeImageButton, { backgroundColor: colors.danger }]}
-              onPress={clearImage}
-            >
-              <Ionicons name="close" size={16} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Recording indicator */}
-        {isRecording && (
-          <View style={[styles.recordingIndicator, { backgroundColor: colors.danger }]}>
-            <View style={styles.recordingDot} />
-            <Text style={styles.recordingText}>Recording...</Text>
-          </View>
-        )}
-
-        {/* Transcribing indicator */}
-        {isTranscribing && (
-          <View style={[styles.recordingIndicator, { backgroundColor: colors.accent }]}>
-            <ActivityIndicator size="small" color="#FFFFFF" />
-            <Text style={styles.recordingText}>Transcribing...</Text>
-          </View>
-        )}
-
-        {/* Input Area - Clean modern design */}
-        <View style={[styles.inputContainer, { backgroundColor: colors.background }]}>
-          {/* Add attachment button */}
-          <TouchableOpacity
-            style={[styles.addButton, { backgroundColor: colors.backgroundTertiary }]}
-            onPress={pickImage}
-            disabled={isGenerating}
-          >
-            <Ionicons name="add" size={24} color={colors.textSecondary} />
-          </TouchableOpacity>
-
-          {/* Input pill container */}
-          <View style={[styles.inputPill, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}>
-            <TextInput
-              style={[styles.input, { color: colors.text }]}
-              value={input}
-              onChangeText={setInput}
-              placeholder={selectedImage ? "Ask about this image..." : "Ask anything"}
-              placeholderTextColor={colors.textMuted}
-              multiline
-              maxLength={1000}
-              editable={!isGenerating}
-              onSubmitEditing={handleSend}
-              blurOnSubmit={false}
-            />
-
-            {/* Mic button inside input */}
-            <TouchableOpacity
-              style={[
-                styles.micButton,
-                isRecording && { backgroundColor: colors.danger, borderRadius: 12 },
-              ]}
-              onPress={handleVoiceInput}
-              disabled={isGenerating || isTranscribing}
-            >
-              {isTranscribing ? (
-                <ActivityIndicator size="small" color={colors.textMuted} />
-              ) : (
-                <Ionicons
-                  name={isRecording ? 'stop' : 'mic-outline'}
-                  size={22}
-                  color={isRecording ? '#FFFFFF' : colors.textMuted}
-                />
-              )}
-            </TouchableOpacity>
-          </View>
-
-          {/* Send button */}
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              { backgroundColor: (!input.trim() && !selectedImage) || isGenerating ? colors.textMuted : '#000000' },
-            ]}
-            onPress={handleSend}
-            disabled={(!input.trim() && !selectedImage) || isGenerating}
-          >
-            {isGenerating ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
-            )}
-          </TouchableOpacity>
-        </View>
+        {/* Chat Input */}
+        <ChatInput
+          input={input}
+          onInputChange={setInput}
+          onSend={handleSend}
+          onPickImage={pickImage}
+          onVoiceInput={handleVoiceInput}
+          selectedImage={selectedImage}
+          onClearImage={() => setSelectedImage(null)}
+          isGenerating={isGenerating}
+          isRecording={isRecording}
+          isTranscribing={isTranscribing}
+          colors={colors}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -640,6 +418,54 @@ const styles = StyleSheet.create({
   keyboardAvoid: {
     flex: 1,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  selector: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 10,
+  },
+  selectorText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  newChatButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emergencyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  emergencyContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  emergencyText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  emergencyDismiss: {
+    padding: 4,
+  },
   messageList: {
     flex: 1,
   },
@@ -647,97 +473,6 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 8,
     flexGrow: 1,
-  },
-  messageBubble: {
-    maxWidth: '85%',
-    padding: 14,
-    marginBottom: 12,
-    borderRadius: 18,
-  },
-  userBubble: {
-    alignSelf: 'flex-end',
-    borderBottomRightRadius: 4,
-  },
-  assistantBubble: {
-    alignSelf: 'flex-start',
-    borderWidth: 0,
-    borderBottomLeftRadius: 4,
-  },
-  messageText: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  userText: {
-    color: '#FFFFFF',
-  },
-  sourceBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    marginTop: 8,
-    alignSelf: 'flex-start',
-  },
-  sourceText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  thinkingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  thinkingText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  streamingText: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    borderWidth: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 15,
-    textAlign: 'center',
-    paddingHorizontal: 32,
-    marginBottom: 24,
-    lineHeight: 22,
-  },
-  suggestionsContainer: {
-    width: '100%',
-    paddingHorizontal: 16,
-    gap: 10,
-  },
-  suggestion: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  suggestionText: {
-    fontSize: 14,
-    fontWeight: '500',
   },
   errorContainer: {
     flexDirection: 'row',
@@ -752,209 +487,6 @@ const styles = StyleSheet.create({
   errorText: {
     flex: 1,
     fontSize: 13,
-    fontWeight: '500',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    gap: 10,
-  },
-  addButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  inputPill: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 44,
-    maxHeight: 120,
-    borderRadius: 22,
-    borderWidth: 1,
-    paddingLeft: 16,
-    paddingRight: 8,
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    paddingVertical: 10,
-    maxHeight: 100,
-  },
-  micButton: {
-    padding: 8,
-  },
-  sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  imageButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  imagePreviewContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-  },
-  imagePreview: {
-    width: 100,
-    height: 100,
-    borderRadius: 12,
-  },
-  removeImageButton: {
-    position: 'absolute',
-    top: 8,
-    left: 108,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  messageImageContainer: {
-    marginBottom: 8,
-  },
-  messageImage: {
-    width: 200,
-    height: 150,
-    borderRadius: 12,
-  },
-  // Conversation header styles
-  conversationHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 0,
-    gap: 10,
-  },
-  conversationSelector: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 0,
-    gap: 10,
-  },
-  conversationTitle: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  headerNewChatButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  // Modal styles
-  modalContainer: {
-    flex: 1,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderBottomWidth: 1,
-  },
-  modalTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  modalCloseButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  newConversationButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    margin: 16,
-    padding: 14,
-    borderRadius: 10,
-    gap: 8,
-  },
-  newConversationText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  conversationList: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  emptyConversations: {
-    alignItems: 'center',
-    paddingVertical: 60,
-    gap: 12,
-  },
-  emptyConversationsText: {
-    fontSize: 14,
-  },
-  conversationItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    marginBottom: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  conversationItemContent: {
-    flex: 1,
-    gap: 4,
-  },
-  conversationItemTitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    lineHeight: 20,
-  },
-  conversationItemDate: {
-    fontSize: 12,
-  },
-  deleteButton: {
-    width: 36,
-    height: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
-  recordingIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginHorizontal: 16,
-    marginBottom: 8,
-    borderRadius: 8,
-    gap: 8,
-  },
-  recordingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#FFFFFF',
-  },
-  recordingText: {
-    color: '#FFFFFF',
-    fontSize: 14,
     fontWeight: '500',
   },
 });
