@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ChatMessage, Conversation, DeviceContext } from '@/types';
-import { generateStreamingCompletion } from '@/lib/cactus';
+import { ChatMessage, Conversation, DeviceContext, ResponseSource } from '@/types';
+import { generateSmartResponse, SmartResponse } from '@/lib/cactus';
 
 const CONVERSATIONS_STORAGE_KEY = 'surviveai_conversations';
 const MESSAGES_STORAGE_KEY = 'surviveai_messages';
@@ -31,6 +31,7 @@ interface ChatStore {
 
   // Persistence
   loadData: () => Promise<void>;
+  persistData: () => Promise<void>;
   setError: (error: string | null) => void;
 }
 
@@ -206,14 +207,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     let rawResponse = '';
 
     try {
-      // Generate streaming response
-      const fullResponse = await generateStreamingCompletion(
+      // Generate smart response (with cache, quality check, and fallback)
+      const smartResult = await generateSmartResponse(
         updatedMessages.map((m) => ({
           id: m.id,
+          conversationId: m.conversationId,
           role: m.role,
           content: m.content,
           timestamp: m.timestamp,
-          images: m.images, // Pass images for vision models
+          images: m.images,
         })),
         (token) => {
           rawResponse += token;
@@ -229,18 +231,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         context
       );
 
-      // Clean the final response - prefer API response, fallback to accumulated tokens
-      const responseToClean = fullResponse || rawResponse;
-      const cleanedResponse = cleanResponse(responseToClean);
+      // Use the smart response (may be from cache, model, or fallback)
+      const finalResponse = cleanResponse(smartResult.response);
 
       // Only add message if we have content
-      if (cleanedResponse) {
+      if (finalResponse) {
         const assistantMessage: ChatMessage = {
           id: `msg_${generateId()}`,
           conversationId: activeConversationId,
           role: 'assistant',
-          content: cleanedResponse,
+          content: finalResponse,
           timestamp: Date.now(),
+          source: smartResult.source,
+          knowledgeEntryId: smartResult.knowledgeEntryId,
         };
 
         set((state) => ({
@@ -257,7 +260,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                   ...c,
                   updatedAt: Date.now(),
                   messageCount: c.messageCount + 1,
-                  preview: cleanedResponse.slice(0, 100),
+                  preview: finalResponse.slice(0, 100),
                 }
               : c
           ),

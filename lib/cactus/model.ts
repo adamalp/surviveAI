@@ -3,6 +3,8 @@ import { ModelInfo } from '@/types';
 
 // Singleton instance
 let lmInstance: CactusLM | null = null;
+// Track initialization state (since isInitialized is private on CactusLM)
+let modelInitialized = false;
 
 // Available models from Cactus SDK
 // See: https://cactuscompute.com/docs/react-native
@@ -117,12 +119,13 @@ export const downloadModel = async (
 export const initializeModel = async (modelId: string = DEFAULT_MODEL_ID): Promise<CactusLM> => {
   const lm = getCactusLM(modelId);
   await lm.init();
+  modelInitialized = true;
   return lm;
 };
 
 // Check if model is initialized
 export const isModelInitialized = (): boolean => {
-  return lmInstance?.isInitialized ?? false;
+  return modelInitialized && lmInstance !== null;
 };
 
 // Get the current instance
@@ -133,4 +136,5 @@ export const getModel = (): CactusLM | null => {
 // Unload the model
 export const unloadModel = (): void => {
   lmInstance = null;
+  modelInitialized = false;
 };

@@ -8,6 +8,10 @@ export interface Conversation {
   preview: string; // Last message preview
 }
 
+// Response source types for tracking where answers come from
+// 'model' = pure model generation, 'knowledge-grounded' = model with knowledge injection
+export type ResponseSource = 'model' | 'knowledge-grounded';
+
 // Chat types
 export interface ChatMessage {
   id: string;
@@ -16,6 +20,8 @@ export interface ChatMessage {
   content: string;
   timestamp: number;
   images?: string[]; // Array of image URIs for vision models
+  source?: ResponseSource; // Where the response came from (model or knowledge-grounded)
+  knowledgeEntryId?: string; // ID of knowledge entry used for grounding
 }
 
 // Model types

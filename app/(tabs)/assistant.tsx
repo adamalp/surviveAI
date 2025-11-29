@@ -199,6 +199,20 @@ export default function AssistantScreen() {
     return date.toLocaleDateString();
   };
 
+  // Render source badge for assistant messages
+  // Shows when knowledge grounding was used to improve model accuracy
+  const renderSourceBadge = (source?: 'model' | 'knowledge-grounded') => {
+    // Only show badge for knowledge-grounded responses
+    if (source !== 'knowledge-grounded') return null;
+
+    return (
+      <View style={[styles.sourceBadge, { backgroundColor: colors.accent + '15' }]}>
+        <Ionicons name="library-outline" size={12} color={colors.accent} />
+        <Text style={[styles.sourceText, { color: colors.accent }]}>Knowledge-Enhanced</Text>
+      </View>
+    );
+  };
+
   const renderMessage = (item: ChatMessage) => {
     const isUser = item.role === 'user';
 
@@ -228,7 +242,10 @@ export default function AssistantScreen() {
         {isUser ? (
           <Text style={[styles.messageText, styles.userText]}>{item.content}</Text>
         ) : (
-          <Markdown style={getMarkdownStyles(colors, isDark)}>{item.content}</Markdown>
+          <>
+            <Markdown style={getMarkdownStyles(colors, isDark)}>{item.content}</Markdown>
+            {renderSourceBadge(item.source)}
+          </>
         )}
       </View>
     );
@@ -245,7 +262,7 @@ export default function AssistantScreen() {
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
-      edges={['bottom']}
+      edges={[]}
     >
       {/* Conversation Header */}
       <View style={[styles.conversationHeader, { backgroundColor: colors.backgroundSecondary, borderBottomColor: colors.border }]}>
@@ -648,6 +665,20 @@ const styles = StyleSheet.create({
   userText: {
     color: '#FFFFFF',
   },
+  sourceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  sourceText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
   thinkingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -718,7 +749,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     padding: 12,
-    paddingBottom: 24,
     borderTopWidth: 0,
     gap: 8,
   },

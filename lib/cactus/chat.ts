@@ -1,7 +1,8 @@
-import { getModel } from './model';
-import { SURVIVAL_SYSTEM_PROMPT } from './constants';
-import { ChatMessage, DeviceContext } from '@/types';
-import { getRelevantKnowledge, KNOWLEDGE_TOOL, executeKnowledgeTool, TopicId } from '@/lib/knowledge';
+import { getModel, isModelInitialized } from './model';
+import { SURVIVAL_SYSTEM_PROMPT, SMALL_MODEL_PARAMS } from './constants';
+import { ChatMessage, DeviceContext, ResponseSource } from '@/types';
+import { getRelevantKnowledge, searchKnowledge } from '@/lib/knowledge';
+import { analyzeResponseQuality } from './quality';
 
 // Build system prompt with optional device context and knowledge
 const buildSystemPrompt = (
@@ -95,7 +96,7 @@ export const generateCompletion = async (
   context?: DeviceContext
 ): Promise<string> => {
   const model = getModel();
-  if (!model || !model.isInitialized) {
+  if (!model || !isModelInitialized()) {
     throw new Error('Model not loaded. Please initialize the model first.');
   }
 
@@ -126,7 +127,7 @@ export const generateStreamingCompletion = async (
   context?: DeviceContext
 ): Promise<string> => {
   const model = getModel();
-  if (!model || !model.isInitialized) {
+  if (!model || !isModelInitialized()) {
     throw new Error('Model not loaded. Please initialize the model first.');
   }
 
@@ -156,6 +157,7 @@ export const askSurvivalQuestion = async (question: string): Promise<string> => 
   const messages: ChatMessage[] = [
     {
       id: 'q1',
+      conversationId: 'temp',
       role: 'user',
       content: question,
       timestamp: Date.now(),
@@ -163,4 +165,93 @@ export const askSurvivalQuestion = async (question: string): Promise<string> => 
   ];
 
   return generateCompletion(messages);
+};
+
+// ============= SMART RESPONSE SYSTEM =============
+// ALWAYS uses on-device model with knowledge grounding for accurate responses
+
+export interface SmartResponse {
+  response: string;
+  source: ResponseSource;
+  knowledgeEntryId?: string;
+  qualityScore?: number;
+}
+
+// Generate a smart response - ALWAYS uses on-device model with knowledge grounding
+// This demonstrates deep Cactus SDK integration and true edge AI capabilities
+export const generateSmartResponse = async (
+  messages: ChatMessage[],
+  onToken: (token: string) => void,
+  context?: DeviceContext
+): Promise<SmartResponse> => {
+  const lastUserMessage = getLastUserMessage(messages);
+
+  if (!lastUserMessage) {
+    return {
+      response: "I didn't catch that. Could you please ask a question?",
+      source: 'model',
+    };
+  }
+
+  // 1. Get relevant knowledge to inject as context (improves model accuracy)
+  const knowledgeEntries = searchKnowledge(lastUserMessage, 2);
+  const knowledgeContext = getRelevantKnowledge(lastUserMessage);
+
+  console.log('[SmartResponse] Knowledge injected:', knowledgeEntries.length > 0 ? 'Yes' : 'No');
+
+  // 2. ALWAYS generate response with on-device model
+  let rawResponse = '';
+  try {
+    const fullResponse = await generateStreamingCompletion(
+      messages,
+      (token) => {
+        rawResponse += token;
+        onToken(token);
+      },
+      context
+    );
+    rawResponse = fullResponse || rawResponse;
+  } catch (error) {
+    console.error('[SmartResponse] Model generation failed:', error);
+    throw error;
+  }
+
+  // 3. Analyze response quality (for logging/debugging, not replacement)
+  const quality = analyzeResponseQuality(rawResponse, knowledgeContext);
+  console.log('[SmartResponse] Quality score:', quality.score, 'Issues:', quality.issues);
+
+  // 4. Check if we have related knowledge (for UI indicator only)
+  const hasKnowledgeGrounding = knowledgeEntries.length > 0;
+
+  // 5. Return model response with metadata
+  return {
+    response: rawResponse,
+    source: hasKnowledgeGrounding ? 'knowledge-grounded' : 'model',
+    knowledgeEntryId: knowledgeEntries[0]?.id,
+    qualityScore: quality.score,
+  };
+};
+
+// Simple wrapper for cases where we don't need streaming
+export const getSmartAnswer = async (
+  question: string,
+  context?: DeviceContext
+): Promise<SmartResponse> => {
+  let response = '';
+
+  const messages: ChatMessage[] = [
+    {
+      id: 'q1',
+      conversationId: 'temp',
+      role: 'user',
+      content: question,
+      timestamp: Date.now(),
+    },
+  ];
+
+  return generateSmartResponse(
+    messages,
+    (token) => { response += token; },
+    context
+  );
 };
