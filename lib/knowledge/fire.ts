@@ -222,6 +222,85 @@ TECHNIQUE:
 - Wet wood on edge to dry before adding
 
 Keep matches/lighter in waterproof container. Body heat can dry damp tinder.`
+    },
+    {
+      id: 'fm-dakota-fire-hole',
+      title: 'Dakota Fire Hole (FM 21-76)',
+      priority: 'high',
+      keywords: ['dakota', 'hole', 'underground', 'concealed', 'cooking', 'wind'],
+      content: `DAKOTA FIRE HOLE (FM 21-76)
+
+Best for: Cooking, wind protection, concealment
+
+Construction:
+1. Dig a hole about 1 foot deep, 1 foot wide
+2. On the UPWIND side, dig a connecting tunnel at an angle
+3. This tunnel provides air flow to the fire
+4. Build fire at bottom of main hole
+
+Advantages:
+- Conceals flame and reduces visible light
+- Excellent for cooking (pot sits on top)
+- Protected from wind
+- Uses less fuel than surface fire
+- Leaves minimal trace
+
+The tunnel creates natural draft - air flows in and feeds fire from below.`
+    },
+    {
+      id: 'fm-snow-fire',
+      title: 'Fire on Snow (FM 21-76)',
+      priority: 'high',
+      keywords: ['snow', 'winter', 'cold', 'frozen', 'ice'],
+      content: `FIRE ON SNOW (FM 21-76)
+
+Never build fire directly on snow - it melts and puts fire out.
+
+Building a platform:
+1. Cut or break green logs (wrist-thick work well)
+2. In extreme cold, wood breaks easily
+3. Lay logs side by side on snow
+4. Add 1-2 more layers
+5. Top layer should be perpendicular to layer below
+6. Build fire on this platform
+
+Alternative methods:
+- Find exposed rock or bare ground
+- Dig down to frozen ground
+- Use flat rocks as base
+- Metal (car hood, etc.) works as platform
+
+Keep extra firewood off snow to stay dry.
+Evergreen branches under you insulate from cold ground.`
+    },
+    {
+      id: 'fm-fire-sites',
+      title: 'Fire Site Selection (FM 21-76)',
+      priority: 'medium',
+      keywords: ['site', 'location', 'where', 'place', 'position'],
+      content: `FIRE SITE SELECTION (FM 21-76)
+
+Before building consider:
+- Terrain and climate
+- Materials available
+- Time you have
+- Why you need fire
+- Security (enemy/wildlife detection)
+
+Look for a dry spot that:
+- Is protected from wind
+- Is properly positioned relative to shelter
+- Will direct heat where you want it
+- Has fuel supply nearby
+
+AVOID:
+- Wet or porous rocks (may EXPLODE when heated)
+- Under dead branches (can fall)
+- Near dry grass/brush (fire spread)
+- In path of wind (sparks fly)
+
+Clear at least 1 meter diameter around fire site.
+Build fire wall with logs/rocks to reflect heat toward you.`
     }
   ]
 };

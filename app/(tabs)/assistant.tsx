@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -24,6 +24,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useChatStore, useDeviceStore, useModelStore } from '@/store';
 import { ChatMessage, Conversation } from '@/types';
 import { CACTUS_MODELS } from '@/lib/cactus/model';
+import { CONFIG } from '@/constants/config';
+import { MessageBubble } from '@/components/chat';
 
 export default function AssistantScreen() {
   const { colors, isDark } = useTheme();
@@ -70,9 +72,11 @@ export default function AssistantScreen() {
 
   // Scroll to bottom when new messages arrive or response updates
   useEffect(() => {
-    setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+    }, CONFIG.SCROLL_TO_BOTTOM_DELAY);
+
+    return () => clearTimeout(timeoutId);
   }, [conversationMessages, currentResponse]);
 
   const handleSend = async () => {
@@ -199,65 +203,19 @@ export default function AssistantScreen() {
     return date.toLocaleDateString();
   };
 
-  // Render source badge for assistant messages
-  // Shows when knowledge grounding was used to improve model accuracy
-  const renderSourceBadge = (source?: 'model' | 'knowledge-grounded') => {
-    // Only show badge for knowledge-grounded responses
-    if (source !== 'knowledge-grounded') return null;
-
-    return (
-      <View style={[styles.sourceBadge, { backgroundColor: colors.accent + '15' }]}>
-        <Ionicons name="library-outline" size={12} color={colors.accent} />
-        <Text style={[styles.sourceText, { color: colors.accent }]}>Knowledge-Enhanced</Text>
-      </View>
-    );
-  };
-
-  const renderMessage = (item: ChatMessage) => {
-    const isUser = item.role === 'user';
-
-    return (
-      <View
-        key={item.id}
-        style={[
-          styles.messageBubble,
-          isUser
-            ? [styles.userBubble, { backgroundColor: colors.accent }]
-            : [styles.assistantBubble, { backgroundColor: colors.cardBackground, borderColor: colors.border }],
-        ]}
-      >
-        {/* Show images if present */}
-        {item.images && item.images.length > 0 && (
-          <View style={styles.messageImageContainer}>
-            {item.images.map((uri, index) => (
-              <Image
-                key={index}
-                source={{ uri }}
-                style={styles.messageImage}
-                resizeMode="cover"
-              />
-            ))}
-          </View>
-        )}
-        {isUser ? (
-          <Text style={[styles.messageText, styles.userText]}>{item.content}</Text>
-        ) : (
-          <>
-            <Markdown style={getMarkdownStyles(colors, isDark)}>{item.content}</Markdown>
-            {renderSourceBadge(item.source)}
-          </>
-        )}
-      </View>
-    );
-  };
-
-  // Suggested prompts for empty chat
-  const suggestedPrompts = [
+  // Memoize suggested prompts to prevent recreation on every render
+  const suggestedPrompts = useMemo(() => [
     'How do I purify water in the wilderness?',
     'What are the signs of hypothermia?',
     'How do I build an emergency shelter?',
     'What should I do if I get lost?',
-  ];
+  ], []);
+
+  // Memoize markdown styles to prevent StyleSheet.create on every render
+  const markdownStyles = useMemo(
+    () => getMarkdownStyles(colors, isDark),
+    [colors, isDark]
+  );
 
   return (
     <SafeAreaView
@@ -401,7 +359,15 @@ export default function AssistantScreen() {
             </View>
           ) : (
             <>
-              {conversationMessages.map(renderMessage)}
+              {conversationMessages.map((msg) => (
+                <MessageBubble
+                  key={msg.id}
+                  message={msg}
+                  colors={colors}
+                  isDark={isDark}
+                  markdownStyles={markdownStyles}
+                />
+              ))}
 
               {/* Streaming response */}
               {isGenerating && (
@@ -413,7 +379,7 @@ export default function AssistantScreen() {
                   ]}
                 >
                   {currentResponse ? (
-                    <Markdown style={getMarkdownStyles(colors, isDark)}>
+                    <Markdown style={markdownStyles}>
                       {currentResponse}
                     </Markdown>
                   ) : (

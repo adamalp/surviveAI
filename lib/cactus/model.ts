@@ -98,12 +98,45 @@ export const getCactusLM = (modelId: string = DEFAULT_MODEL_ID): CactusLM => {
   return lmInstance;
 };
 
+// Parse error for user-friendly messages
+const parseDownloadError = (error: unknown, modelId: string): string => {
+  const errorStr = error instanceof Error ? error.message : String(error);
+  const modelConfig = CACTUS_MODELS[modelId];
+  const modelName = modelConfig?.name || modelId;
+
+  // Common error patterns
+  if (errorStr.includes('network') || errorStr.includes('Network') || errorStr.includes('timeout')) {
+    return `Network error downloading ${modelName}. Check your internet connection and try again.`;
+  }
+  if (errorStr.includes('disk') || errorStr.includes('storage') || errorStr.includes('space')) {
+    return `Not enough storage space for ${modelName} (${modelConfig?.size || 'unknown size'}). Free up space and try again.`;
+  }
+  if (errorStr.includes('not found') || errorStr.includes('404') || errorStr.includes('unavailable')) {
+    return `Model ${modelName} is not available. Try a different model.`;
+  }
+  if (errorStr.includes('cancelled') || errorStr.includes('aborted')) {
+    return `Download cancelled. Tap to retry.`;
+  }
+  if (errorStr.includes('permission')) {
+    return `Storage permission denied. Check app permissions in Settings.`;
+  }
+
+  // Return original error with model context
+  return `${modelName} download failed: ${errorStr}`;
+};
+
 // Download the model
 export const downloadModel = async (
   modelId: string = DEFAULT_MODEL_ID,
   onProgress?: (progress: number) => void
 ): Promise<void> => {
   console.log(`[CactusModel] Downloading model: ${modelId}`);
+
+  // Validate model ID
+  if (!CACTUS_MODELS[modelId]) {
+    throw new Error(`Unknown model: ${modelId}. Available models: ${Object.keys(CACTUS_MODELS).join(', ')}`);
+  }
+
   try {
     const lm = getCactusLM(modelId);
     console.log(`[CactusModel] Got LM instance, starting download...`);
@@ -111,7 +144,8 @@ export const downloadModel = async (
     console.log(`[CactusModel] Download completed for: ${modelId}`);
   } catch (error) {
     console.error(`[CactusModel] Download failed:`, error);
-    throw error;
+    const friendlyMessage = parseDownloadError(error, modelId);
+    throw new Error(friendlyMessage);
   }
 };
 

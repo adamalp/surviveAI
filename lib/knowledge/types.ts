@@ -25,4 +25,5 @@ export type TopicId =
   | 'food'
   | 'fire'
   | 'weather'
-  | 'animals';
+  | 'animals'
+  | 'psychology';

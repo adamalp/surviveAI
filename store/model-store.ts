@@ -51,6 +51,7 @@ export const useModelStore = create<ModelStore>()(
       // Download and load a model
       downloadAndLoad: async (modelId?: string) => {
         const targetModelId = modelId || get().currentModelId;
+        const modelConfig = CACTUS_MODELS[targetModelId];
         set({ isLoading: true, loadProgress: 0, error: null });
 
         try {
@@ -78,18 +79,21 @@ export const useModelStore = create<ModelStore>()(
           });
         } catch (error) {
           console.error(`[ModelStore] Error:`, error);
-          const errorObj = error as any;
-          let message = 'Unknown error';
+          const errorObj = error as Error | undefined;
+          let message: string;
+
           if (errorObj?.message) {
+            // Error already has a user-friendly message from model.ts
             message = errorObj.message;
           } else if (typeof error === 'string') {
             message = error;
           } else {
-            message = JSON.stringify(error);
+            message = `Failed to download ${modelConfig?.name || targetModelId}. Please try again.`;
           }
+
           console.error(`[ModelStore] Error message: ${message}`);
-          set({ isLoading: false, error: `Failed: ${message}`, loadProgress: 0 });
-          throw error;
+          set({ isLoading: false, error: message, loadProgress: 0 });
+          throw new Error(message);
         }
       },
 

@@ -6,6 +6,7 @@ import { navigationKnowledge } from './navigation';
 import { fireKnowledge } from './fire';
 import { signalingKnowledge } from './signaling';
 import { foodKnowledge } from './food';
+import { psychologyKnowledge } from './psychology';
 
 // Export all knowledge topics
 export const KNOWLEDGE_TOPICS: Record<TopicId, KnowledgeTopic> = {
@@ -16,6 +17,7 @@ export const KNOWLEDGE_TOPICS: Record<TopicId, KnowledgeTopic> = {
   'fire': fireKnowledge,
   'signaling': signalingKnowledge,
   'food': foodKnowledge,
+  'psychology': psychologyKnowledge,
   // Aliases
   'weather': shelterKnowledge, // Weather relates to shelter
   'animals': foodKnowledge, // Animals relates to food
@@ -148,13 +150,13 @@ export const getRelevantKnowledge = (query: string): string => {
 // Tool definition for Cactus SDK
 export const KNOWLEDGE_TOOL = {
   name: 'lookup_survival_knowledge',
-  description: 'Look up specific survival knowledge from the database. Use this when you need accurate information about first aid, water purification, shelter building, navigation, fire starting, signaling for rescue, or food foraging.',
+  description: 'Look up specific survival knowledge from the database. Use this when you need accurate information about first aid, water purification, shelter building, navigation, fire starting, signaling for rescue, food foraging, or survival psychology/mental preparedness.',
   parameters: {
     type: 'object',
     properties: {
       topic: {
         type: 'string',
-        enum: ['first-aid', 'water', 'shelter', 'navigation', 'fire', 'signaling', 'food'],
+        enum: ['first-aid', 'water', 'shelter', 'navigation', 'fire', 'signaling', 'food', 'psychology'],
         description: 'The survival topic to look up',
       },
       query: {

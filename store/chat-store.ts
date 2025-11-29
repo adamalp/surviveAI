@@ -2,6 +2,17 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ChatMessage, Conversation, DeviceContext, ResponseSource } from '@/types';
 import { generateSmartResponse, SmartResponse } from '@/lib/cactus';
+import { CONFIG } from '@/constants/config';
+
+// Timeout wrapper for model response generation
+const withTimeout = <T>(promise: Promise<T>, ms: number, errorMessage: string): Promise<T> => {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(errorMessage)), ms)
+    ),
+  ]);
+};
 
 const CONVERSATIONS_STORAGE_KEY = 'surviveai_conversations';
 const MESSAGES_STORAGE_KEY = 'surviveai_messages';
@@ -207,8 +218,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     let rawResponse = '';
 
     try {
-      // Generate smart response (with cache, quality check, and fallback)
-      const smartResult = await generateSmartResponse(
+      // Generate smart response with timeout protection
+      const responsePromise = generateSmartResponse(
         updatedMessages.map((m) => ({
           id: m.id,
           conversationId: m.conversationId,
@@ -229,6 +240,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           }
         },
         context
+      );
+
+      // Wrap with timeout to prevent infinite waits
+      const smartResult = await withTimeout(
+        responsePromise,
+        CONFIG.RESPONSE_TIMEOUT,
+        'Response timed out. The model may be overloaded. Please try again.'
       );
 
       // Use the smart response (may be from cache, model, or fallback)

@@ -3,6 +3,9 @@ import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, borderRadius, typography, shadows, ThemeColors, ThemeMode } from '@/constants/theme';
 
+// Re-export types for external use
+export type { ThemeColors, ThemeMode };
+
 const THEME_STORAGE_KEY = 'surviveai_theme_preference';
 
 interface ThemeContextType {

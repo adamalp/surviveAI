@@ -15,6 +15,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useDeviceStore } from '@/store';
 import { Badge } from '@/components/ui';
+import { CONFIG } from '@/constants/config';
 
 export default function HomeScreen() {
   const { colors, spacing, borderRadius } = useTheme();
@@ -43,7 +44,7 @@ export default function HomeScreen() {
     });
 
     // Refresh battery periodically
-    const batteryInterval = setInterval(updateBattery, 60000);
+    const batteryInterval = setInterval(updateBattery, CONFIG.BATTERY_UPDATE_INTERVAL);
 
     return () => {
       unsubscribe();

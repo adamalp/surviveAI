@@ -1,8 +1,9 @@
 import { getModel, isModelInitialized } from './model';
-import { SURVIVAL_SYSTEM_PROMPT, SMALL_MODEL_PARAMS } from './constants';
+import { SURVIVAL_SYSTEM_PROMPT, SMALL_MODEL_PARAMS, DEFAULT_INFERENCE_PARAMS } from './constants';
 import { ChatMessage, DeviceContext, ResponseSource } from '@/types';
 import { getRelevantKnowledge, searchKnowledge } from '@/lib/knowledge';
 import { analyzeResponseQuality } from './quality';
+import { logger } from '@/constants/config';
 
 // Build system prompt with optional device context and knowledge
 const buildSystemPrompt = (
@@ -108,12 +109,12 @@ export const generateCompletion = async (
 
   const formattedMessages = formatMessages(messages, context, knowledgeContext);
 
-  console.log('[Chat] Knowledge injected:', knowledgeContext ? 'Yes' : 'No');
+  logger.debug('Chat', 'Knowledge injected', knowledgeContext ? 'Yes' : 'No');
 
   const result = await model.complete({
     messages: formattedMessages,
     options: {
-      maxTokens: 1024,
+      maxTokens: SMALL_MODEL_PARAMS.maxTokens,
     },
   });
 
@@ -139,12 +140,12 @@ export const generateStreamingCompletion = async (
 
   const formattedMessages = formatMessages(messages, context, knowledgeContext);
 
-  console.log('[Chat] Streaming with knowledge:', knowledgeContext ? 'Yes' : 'No');
+  logger.debug('Chat', 'Streaming with knowledge', knowledgeContext ? 'Yes' : 'No');
 
   const result = await model.complete({
     messages: formattedMessages,
     options: {
-      maxTokens: 1024,
+      maxTokens: SMALL_MODEL_PARAMS.maxTokens,
     },
     onToken,
   });
@@ -197,7 +198,7 @@ export const generateSmartResponse = async (
   const knowledgeEntries = searchKnowledge(lastUserMessage, 2);
   const knowledgeContext = getRelevantKnowledge(lastUserMessage);
 
-  console.log('[SmartResponse] Knowledge injected:', knowledgeEntries.length > 0 ? 'Yes' : 'No');
+  logger.debug('SmartResponse', 'Knowledge injected', knowledgeEntries.length > 0 ? 'Yes' : 'No');
 
   // 2. ALWAYS generate response with on-device model
   let rawResponse = '';
@@ -212,13 +213,13 @@ export const generateSmartResponse = async (
     );
     rawResponse = fullResponse || rawResponse;
   } catch (error) {
-    console.error('[SmartResponse] Model generation failed:', error);
+    logger.error('SmartResponse', 'Model generation failed', error);
     throw error;
   }
 
   // 3. Analyze response quality (for logging/debugging, not replacement)
   const quality = analyzeResponseQuality(rawResponse, knowledgeContext);
-  console.log('[SmartResponse] Quality score:', quality.score, 'Issues:', quality.issues);
+  logger.debug('SmartResponse', `Quality score: ${quality.score}`, quality.issues);
 
   // 4. Check if we have related knowledge (for UI indicator only)
   const hasKnowledgeGrounding = knowledgeEntries.length > 0;
