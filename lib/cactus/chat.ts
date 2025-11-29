@@ -206,13 +206,18 @@ const generateWithToolCalling = async (
   logger.debug('ToolCalling', 'Starting completion with tools');
 
   // First call - may return function calls
+  // IMPORTANT: Don't stream this call - it may contain raw JSON function calls
+  let firstResponse = '';
   const result = await model.complete({
     messages: formattedMessages,
     tools: SURVIVAL_TOOLS,
     options: {
       maxTokens: SMALL_MODEL_PARAMS.maxTokens,
     },
-    onToken,
+    onToken: (token) => {
+      firstResponse += token;
+      // Don't stream to UI during first call - may be JSON function call
+    },
   });
 
   // Check if model wants to call a tool
@@ -270,7 +275,16 @@ const generateWithToolCalling = async (
     }
   }
 
-  // No tool call, return direct response with metrics
+  // No tool call - stream the buffered response to UI now
+  // Filter out any JSON-like content that might be malformed function calls
+  const responseText = result?.response || firstResponse;
+  const cleanedResponse = responseText.replace(/\{[\s\S]*"function_call"[\s\S]*\}/g, '').trim();
+
+  // Stream cleaned response to UI
+  if (cleanedResponse) {
+    onToken(cleanedResponse);
+  }
+
   const metrics: PerformanceMetrics = {
     tokensPerSecond: result?.tokensPerSecond || 0,
     timeToFirstTokenMs: result?.timeToFirstTokenMs || 0,
@@ -279,7 +293,7 @@ const generateWithToolCalling = async (
   };
 
   return {
-    response: result?.response || '',
+    response: cleanedResponse,
     usedTools: false,
     metrics,
   };
@@ -287,9 +301,13 @@ const generateWithToolCalling = async (
 
 // Check if the current model supports tool calling
 const currentModelSupportsToolCalling = (): boolean => {
-  const { currentModelId } = useModelStore.getState();
-  const modelConfig = CACTUS_MODELS[currentModelId];
-  return modelConfig?.supportsToolCalling ?? false;
+  const { currentModelId, loadedModelId } = useModelStore.getState();
+  // Use loadedModelId if available, otherwise currentModelId
+  const modelId = loadedModelId || currentModelId;
+  const modelConfig = CACTUS_MODELS[modelId];
+  const supports = modelConfig?.supportsToolCalling ?? false;
+  logger.debug('ToolCalling', `Model ${modelId} supportsToolCalling: ${supports}`);
+  return supports;
 };
 
 // Generate a smart response - uses tool calling for capable models,

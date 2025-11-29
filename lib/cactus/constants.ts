@@ -22,32 +22,19 @@ export const DEFAULT_MODEL = AVAILABLE_MODELS[0];
 
 // System prompt for survival assistant - optimized for small on-device models
 // Keep it simple - small models struggle with complex instructions
-export const SURVIVAL_SYSTEM_PROMPT = `You are a survival expert. Give short, direct answers.
+// IMPORTANT: Do NOT include examples - small models copy them literally
+export const SURVIVAL_SYSTEM_PROMPT = `You are a survival expert. Give short, practical answers about wilderness survival, first aid, and emergency preparedness.
 
-Rules:
-- Answer in 3-5 numbered steps
-- Keep it under 100 words
-- End with one follow-up question the user might ask
-- Use plain text only, no special characters
+Keep answers under 100 words. Be direct and helpful.
 
-Example format:
-1. First step
-2. Second step
-3. Third step
-
-Follow-up: "Would you like to know about [topic]?"
-
-Use any SURVIVAL KNOWLEDGE provided below to give accurate answers.`;
+If SURVIVAL KNOWLEDGE is provided below, use it to give accurate information.`;
 
 // Extended system prompt for models with tool calling capability
 export const TOOL_CALLING_SYSTEM_PROMPT = `You are a survival expert with access to a survival knowledge database.
 
-Rules:
-- Answer in 3-5 numbered steps
-- Keep it under 100 words
-- End with one follow-up question
+Give short, practical answers about wilderness survival, first aid, and emergency preparedness. Keep answers under 100 words.
 
-When asked about first aid, water, shelter, navigation, fire, signaling, food, or psychology, use the lookup_survival_knowledge tool to get accurate information before answering.`;
+When asked about survival topics, use the lookup_survival_knowledge tool to get accurate information before answering.`;
 
 // Model inference parameters - optimized for small models
 export const DEFAULT_INFERENCE_PARAMS = {

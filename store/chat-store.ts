@@ -68,6 +68,10 @@ const cleanResponse = (text: string | undefined | null): string => {
   // Remove other common artifacts
   cleaned = cleaned.replace(/<\|.*?\|>/g, ''); // Remove special tokens like <|end|>
 
+  // Remove raw JSON function calls that models might output as text
+  cleaned = cleaned.replace(/\{[\s\S]*"function_call"[\s\S]*\}/g, '');
+  cleaned = cleaned.replace(/\{[\s\S]*"name"\s*:\s*"lookup_survival_knowledge"[\s\S]*\}/g, '');
+
   // Trim whitespace
   cleaned = cleaned.trim();
 
