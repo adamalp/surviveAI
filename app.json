@@ -17,7 +17,9 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "SurviveAI needs your location to display GPS coordinates for emergency situations.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "SurviveAI needs your location to display GPS coordinates for emergency situations."
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "SurviveAI needs your location to display GPS coordinates for emergency situations.",
+        "NSCameraUsageDescription": "SurviveAI needs camera access to let you share photos with the AI for visual analysis and identification.",
+        "NSPhotoLibraryUsageDescription": "SurviveAI needs photo library access to let you share images with the AI for visual analysis and identification."
       },
       "bundleIdentifier": "com.anonymous.SurviveAI"
     },
@@ -50,7 +52,14 @@
           "locationAlwaysAndWhenInUsePermission": "SurviveAI needs your location to display GPS coordinates for emergency situations."
         }
       ],
-      "expo-sensors"
+      "expo-sensors",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "SurviveAI needs photo library access to let you share images with the AI for visual analysis.",
+          "cameraPermission": "SurviveAI needs camera access to let you take photos for the AI to analyze."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

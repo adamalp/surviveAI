@@ -15,6 +15,7 @@ export const CACTUS_MODELS: Record<string, ModelConfig> = {
     size: '~172MB',
     quality: 1,
     speed: 5,
+    supportsVision: false,
   },
   'qwen3-0.6': {
     id: 'qwen3-0.6',
@@ -23,6 +24,16 @@ export const CACTUS_MODELS: Record<string, ModelConfig> = {
     size: '~394MB',
     quality: 2,
     speed: 5,
+    supportsVision: false,
+  },
+  'lfm2-vl-450m': {
+    id: 'lfm2-vl-450m',
+    name: 'LFM2 Vision 450M',
+    description: 'Vision model. Can analyze images and photos.',
+    size: '~420MB',
+    quality: 3,
+    speed: 4,
+    supportsVision: true,
   },
   'smollm2-0.4': {
     id: 'smollm2-0.4',
@@ -31,6 +42,7 @@ export const CACTUS_MODELS: Record<string, ModelConfig> = {
     size: '~227MB',
     quality: 2,
     speed: 5,
+    supportsVision: false,
   },
   'gemma3-1': {
     id: 'gemma3-1',
@@ -39,6 +51,7 @@ export const CACTUS_MODELS: Record<string, ModelConfig> = {
     size: '~700MB',
     quality: 3,
     speed: 4,
+    supportsVision: false,
   },
   'qwen3-1.7': {
     id: 'qwen3-1.7',
@@ -47,6 +60,7 @@ export const CACTUS_MODELS: Record<string, ModelConfig> = {
     size: '~1.1GB',
     quality: 4,
     speed: 3,
+    supportsVision: false,
   },
   'smollm2-1.7': {
     id: 'smollm2-1.7',
@@ -55,6 +69,7 @@ export const CACTUS_MODELS: Record<string, ModelConfig> = {
     size: '~1.1GB',
     quality: 4,
     speed: 3,
+    supportsVision: false,
   },
 };
 
@@ -65,6 +80,7 @@ export interface ModelConfig {
   size: string;
   quality: number; // 1-5 rating
   speed: number;   // 1-5 rating
+  supportsVision: boolean;
 }
 
 export const DEFAULT_MODEL_ID = 'qwen3-0.6';

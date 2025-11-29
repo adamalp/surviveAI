@@ -171,6 +171,13 @@ export default function SettingsScreen() {
                       <Text style={[styles.modelName, { color: colors.text }]}>
                         {model.name}
                       </Text>
+                      {model.supportsVision && (
+                        <View style={[styles.visionBadge, { backgroundColor: colors.info + '20' }]}>
+                          <Text style={[styles.visionText, { color: colors.info }]}>
+                            Vision
+                          </Text>
+                        </View>
+                      )}
                       {model.id === DEFAULT_MODEL_ID && (
                         <View style={[styles.recommendedBadge, { backgroundColor: colors.accent + '20' }]}>
                           <Text style={[styles.recommendedText, { color: colors.accent }]}>
@@ -433,6 +440,15 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   recommendedText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  visionBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  visionText: {
     fontSize: 11,
     fontWeight: '600',
   },

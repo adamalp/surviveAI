@@ -15,6 +15,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: number;
+  images?: string[]; // Array of image URIs for vision models
 }
 
 // Model types

@@ -11,18 +11,24 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
+  Image,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { Ionicons } from '@expo/vector-icons';
 import Markdown from 'react-native-markdown-display';
+import * as ImagePicker from 'expo-image-picker';
 
 import { useTheme } from '@/contexts/ThemeContext';
-import { useChatStore, useDeviceStore } from '@/store';
+import { useChatStore, useDeviceStore, useModelStore } from '@/store';
 import { ChatMessage, Conversation } from '@/types';
+import { CACTUS_MODELS } from '@/lib/cactus/model';
 
 export default function AssistantScreen() {
   const { colors, isDark } = useTheme();
   const [input, setInput] = useState('');
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showConversationList, setShowConversationList] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -40,6 +46,11 @@ export default function AssistantScreen() {
   } = useChatStore();
 
   const { getDeviceContext, updateLocation, updateBattery } = useDeviceStore();
+  const { currentModelId, isLoaded } = useModelStore();
+
+  // Check if current model supports vision
+  const currentModel = CACTUS_MODELS[currentModelId];
+  const supportsVision = currentModel?.supportsVision ?? false;
 
   // Initialize device data and conversation on mount
   useEffect(() => {
@@ -65,14 +76,79 @@ export default function AssistantScreen() {
   }, [conversationMessages, currentResponse]);
 
   const handleSend = async () => {
-    if (!input.trim() || isGenerating) return;
+    if ((!input.trim() && !selectedImage) || isGenerating) return;
 
-    const message = input.trim();
+    const message = input.trim() || (selectedImage ? 'What is in this image?' : '');
+    const images = selectedImage ? [selectedImage] : undefined;
+
     setInput('');
+    setSelectedImage(null);
 
     // Get device context for AI injection
     const context = getDeviceContext();
-    await sendMessage(message, context);
+    await sendMessage(message, context, images);
+  };
+
+  // Pick image from gallery
+  const pickImage = async () => {
+    if (!supportsVision) {
+      Alert.alert(
+        'Vision Not Supported',
+        'The current model does not support image analysis. Please select the "LFM2 Vision 450M" model in Settings to use this feature.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Please allow access to your photos to use this feature.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.8,
+      base64: false,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setSelectedImage(result.assets[0].uri);
+    }
+  };
+
+  // Take photo with camera
+  const takePhoto = async () => {
+    if (!supportsVision) {
+      Alert.alert(
+        'Vision Not Supported',
+        'The current model does not support image analysis. Please select the "LFM2 Vision 450M" model in Settings to use this feature.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Please allow camera access to use this feature.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.8,
+      base64: false,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setSelectedImage(result.assets[0].uri);
+    }
+  };
+
+  // Clear selected image
+  const clearImage = () => {
+    setSelectedImage(null);
   };
 
   const handleNewChat = () => {
@@ -136,6 +212,19 @@ export default function AssistantScreen() {
             : [styles.assistantBubble, { backgroundColor: colors.cardBackground, borderColor: colors.border }],
         ]}
       >
+        {/* Show images if present */}
+        {item.images && item.images.length > 0 && (
+          <View style={styles.messageImageContainer}>
+            {item.images.map((uri, index) => (
+              <Image
+                key={index}
+                source={{ uri }}
+                style={styles.messageImage}
+                resizeMode="cover"
+              />
+            ))}
+          </View>
+        )}
         {isUser ? (
           <Text style={[styles.messageText, styles.userText]}>{item.content}</Text>
         ) : (
@@ -337,6 +426,19 @@ export default function AssistantScreen() {
           </View>
         )}
 
+        {/* Image Preview */}
+        {selectedImage && (
+          <View style={[styles.imagePreviewContainer, { backgroundColor: colors.backgroundSecondary }]}>
+            <Image source={{ uri: selectedImage }} style={styles.imagePreview} resizeMode="cover" />
+            <TouchableOpacity
+              style={[styles.removeImageButton, { backgroundColor: colors.danger }]}
+              onPress={clearImage}
+            >
+              <Ionicons name="close" size={16} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Input Area */}
         <View
           style={[
@@ -344,6 +446,30 @@ export default function AssistantScreen() {
             { backgroundColor: colors.backgroundSecondary, borderTopColor: colors.border },
           ]}
         >
+          {/* Image buttons */}
+          <TouchableOpacity
+            style={[styles.imageButton, { backgroundColor: colors.backgroundTertiary }]}
+            onPress={pickImage}
+            disabled={isGenerating}
+          >
+            <Ionicons
+              name="image-outline"
+              size={22}
+              color={supportsVision ? colors.accent : colors.textMuted}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.imageButton, { backgroundColor: colors.backgroundTertiary }]}
+            onPress={takePhoto}
+            disabled={isGenerating}
+          >
+            <Ionicons
+              name="camera-outline"
+              size={22}
+              color={supportsVision ? colors.accent : colors.textMuted}
+            />
+          </TouchableOpacity>
+
           <TextInput
             style={[
               styles.input,
@@ -355,7 +481,7 @@ export default function AssistantScreen() {
             ]}
             value={input}
             onChangeText={setInput}
-            placeholder="Ask a survival question..."
+            placeholder={selectedImage ? "Ask about this image..." : "Ask a survival question..."}
             placeholderTextColor={colors.textMuted}
             multiline
             maxLength={1000}
@@ -366,15 +492,15 @@ export default function AssistantScreen() {
           <TouchableOpacity
             style={[
               styles.sendButton,
-              { backgroundColor: !input.trim() || isGenerating ? colors.border : colors.accent },
+              { backgroundColor: (!input.trim() && !selectedImage) || isGenerating ? colors.border : colors.accent },
             ]}
             onPress={handleSend}
-            disabled={!input.trim() || isGenerating}
+            disabled={(!input.trim() && !selectedImage) || isGenerating}
           >
             {isGenerating ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
-              <FontAwesome name="arrow-up" size={18} color="#FFFFFF" />
+              <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
             )}
           </TouchableOpacity>
         </View>
@@ -594,7 +720,7 @@ const styles = StyleSheet.create({
     padding: 12,
     paddingBottom: 24,
     borderTopWidth: 0,
-    gap: 10,
+    gap: 8,
   },
   input: {
     flex: 1,
@@ -612,6 +738,40 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  imageButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imagePreviewContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  imagePreview: {
+    width: 100,
+    height: 100,
+    borderRadius: 12,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 8,
+    left: 108,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  messageImageContainer: {
+    marginBottom: 8,
+  },
+  messageImage: {
+    width: 200,
+    height: 150,
+    borderRadius: 12,
   },
   // Conversation header styles
   conversationHeader: {

@@ -50,18 +50,32 @@ ${context.device.battery_percent !== null && context.device.battery_percent < 20
   return prompt;
 };
 
+// Message format for Cactus API (with optional images)
+interface CactusMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+  images?: string[];
+}
+
 // Format messages for the Cactus API with knowledge injection
 const formatMessages = (
   messages: ChatMessage[],
   context?: DeviceContext,
   knowledgeContext?: string
-): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> => {
+): CactusMessage[] => {
   return [
     { role: 'system', content: buildSystemPrompt(context, knowledgeContext) },
-    ...messages.map((m) => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-    })),
+    ...messages.map((m) => {
+      const msg: CactusMessage = {
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      };
+      // Include images if present (for vision models)
+      if (m.images && m.images.length > 0) {
+        msg.images = m.images;
+      }
+      return msg;
+    }),
   ];
 };
 

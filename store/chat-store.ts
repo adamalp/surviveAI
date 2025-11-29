@@ -26,7 +26,7 @@ interface ChatStore {
   renameConversation: (id: string, title: string) => Promise<void>;
 
   // Message Actions
-  sendMessage: (content: string, context?: DeviceContext) => Promise<void>;
+  sendMessage: (content: string, context?: DeviceContext, images?: string[]) => Promise<void>;
   clearConversation: (id: string) => Promise<void>;
 
   // Persistence
@@ -155,7 +155,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   // Send a message in the active conversation
-  sendMessage: async (content: string, context?: DeviceContext) => {
+  sendMessage: async (content: string, context?: DeviceContext, images?: string[]) => {
     const { activeConversationId, messages, conversations } = get();
 
     if (!activeConversationId) {
@@ -172,6 +172,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       role: 'user',
       content,
       timestamp: Date.now(),
+      images: images, // Include images if provided
     };
 
     // Add user message
@@ -212,6 +213,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           role: m.role,
           content: m.content,
           timestamp: m.timestamp,
+          images: m.images, // Pass images for vision models
         })),
         (token) => {
           rawResponse += token;
