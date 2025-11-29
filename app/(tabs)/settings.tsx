@@ -36,6 +36,7 @@ export default function SettingsScreen() {
     loadedModelId,
     selectModel,
     downloadAndLoad,
+    isModelDownloaded,
   } = useModelStore();
 
   const { conversations } = useChatStore();
@@ -137,6 +138,7 @@ export default function SettingsScreen() {
         {MODEL_LIST.map((model) => {
           const isSelected = model.id === currentModelId;
           const isCurrentlyLoaded = model.id === loadedModelId && isLoaded;
+          const isDownloaded = isModelDownloaded(model.id);
 
           return (
             <TouchableOpacity
@@ -191,12 +193,17 @@ export default function SettingsScreen() {
                     </Text>
                   </View>
                 </View>
-                {isCurrentlyLoaded && (
+                {isCurrentlyLoaded ? (
                   <View style={[styles.loadedBadge, { backgroundColor: colors.successBackground }]}>
                     <Ionicons name="checkmark-circle" size={14} color={colors.success} />
                     <Text style={[styles.loadedText, { color: colors.success }]}>Loaded</Text>
                   </View>
-                )}
+                ) : isDownloaded ? (
+                  <View style={[styles.loadedBadge, { backgroundColor: colors.info + '20' }]}>
+                    <Ionicons name="cloud-done-outline" size={14} color={colors.info} />
+                    <Text style={[styles.loadedText, { color: colors.info }]}>Downloaded</Text>
+                  </View>
+                ) : null}
               </View>
 
               <Text style={[styles.modelDescription, { color: colors.textSecondary }]}>
@@ -238,10 +245,10 @@ export default function SettingsScreen() {
           </View>
         ) : currentModelId !== loadedModelId || !isLoaded ? (
           <Button
-            title={`Download & Load ${currentModel?.name || 'Model'}`}
+            title={isModelDownloaded(currentModelId) ? `Load ${currentModel?.name || 'Model'}` : `Download & Load ${currentModel?.name || 'Model'}`}
             onPress={handleDownload}
             variant="primary"
-            icon={<Ionicons name="cloud-download-outline" size={18} color="#FFFFFF" />}
+            icon={<Ionicons name={isModelDownloaded(currentModelId) ? "play-outline" : "cloud-download-outline"} size={18} color="#FFFFFF" />}
             fullWidth
           />
         ) : null}

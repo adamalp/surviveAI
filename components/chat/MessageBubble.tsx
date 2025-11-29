@@ -2,7 +2,7 @@ import React, { memo } from 'react';
 import { StyleSheet, View, Text, Image, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Markdown from 'react-native-markdown-display';
-import { ChatMessage, ResponseSource } from '@/types';
+import { ChatMessage, ResponseSource, PerformanceMetrics } from '@/types';
 import { ThemeColors } from '@/contexts/ThemeContext';
 
 interface MessageBubbleProps {
@@ -26,6 +26,35 @@ const SourceBadge = memo(({ source, colors }: { source?: ResponseSource; colors:
 });
 
 SourceBadge.displayName = 'SourceBadge';
+
+// Render performance metrics badge
+const MetricsBadge = memo(({ metrics, colors }: { metrics?: PerformanceMetrics; colors: ThemeColors }) => {
+  if (!metrics || metrics.tokensPerSecond === 0) return null;
+
+  const formatTime = (ms: number): string => {
+    if (ms < 1000) return `${Math.round(ms)}ms`;
+    return `${(ms / 1000).toFixed(1)}s`;
+  };
+
+  return (
+    <View style={[styles.metricsBadge, { backgroundColor: colors.backgroundTertiary }]}>
+      <Ionicons name="speedometer-outline" size={10} color={colors.textMuted} />
+      <Text style={[styles.metricsText, { color: colors.textMuted }]}>
+        {metrics.tokensPerSecond.toFixed(1)} tok/s
+      </Text>
+      <Text style={[styles.metricsSeparator, { color: colors.border }]}>|</Text>
+      <Text style={[styles.metricsText, { color: colors.textMuted }]}>
+        {metrics.totalTokens} tokens
+      </Text>
+      <Text style={[styles.metricsSeparator, { color: colors.border }]}>|</Text>
+      <Text style={[styles.metricsText, { color: colors.textMuted }]}>
+        {formatTime(metrics.totalTimeMs)}
+      </Text>
+    </View>
+  );
+});
+
+MetricsBadge.displayName = 'MetricsBadge';
 
 export const MessageBubble = memo(({ message, colors, isDark, markdownStyles }: MessageBubbleProps) => {
   const isUser = message.role === 'user';
@@ -57,7 +86,10 @@ export const MessageBubble = memo(({ message, colors, isDark, markdownStyles }: 
       ) : (
         <>
           <Markdown style={markdownStyles}>{message.content}</Markdown>
-          <SourceBadge source={message.source} colors={colors} />
+          <View style={styles.badgeContainer}>
+            <SourceBadge source={message.source} colors={colors} />
+            <MetricsBadge metrics={message.metrics} colors={colors} />
+          </View>
         </>
       )}
     </View>
@@ -96,12 +128,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
-    marginTop: 8,
-    alignSelf: 'flex-start',
   },
   sourceText: {
     fontSize: 11,
     fontWeight: '600',
+  },
+  badgeContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  metricsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  metricsText: {
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  metricsSeparator: {
+    fontSize: 10,
+    marginHorizontal: 2,
   },
   messageImageContainer: {
     marginBottom: 8,

@@ -1,9 +1,11 @@
-import { getModel, isModelInitialized } from './model';
-import { SURVIVAL_SYSTEM_PROMPT, SMALL_MODEL_PARAMS, DEFAULT_INFERENCE_PARAMS } from './constants';
-import { ChatMessage, DeviceContext, ResponseSource } from '@/types';
+import { getModel, isModelInitialized, CACTUS_MODELS } from './model';
+import { SURVIVAL_SYSTEM_PROMPT, TOOL_CALLING_SYSTEM_PROMPT, SMALL_MODEL_PARAMS, DEFAULT_INFERENCE_PARAMS } from './constants';
+import { ChatMessage, DeviceContext, ResponseSource, PerformanceMetrics } from '@/types';
 import { getRelevantKnowledge, searchKnowledge } from '@/lib/knowledge';
 import { analyzeResponseQuality } from './quality';
 import { logger } from '@/constants/config';
+import { SURVIVAL_TOOLS, executeTool, formatToolResultForMessages } from './tools';
+import { useModelStore } from '@/store/model-store';
 
 // Build system prompt with optional device context and knowledge
 const buildSystemPrompt = (
@@ -169,17 +171,129 @@ export const askSurvivalQuestion = async (question: string): Promise<string> => 
 };
 
 // ============= SMART RESPONSE SYSTEM =============
-// ALWAYS uses on-device model with knowledge grounding for accurate responses
+// Uses on-device model with tool calling for dynamic knowledge retrieval
 
 export interface SmartResponse {
   response: string;
   source: ResponseSource;
   knowledgeEntryId?: string;
   qualityScore?: number;
+  usedToolCalling?: boolean;
+  metrics?: PerformanceMetrics;
 }
 
-// Generate a smart response - ALWAYS uses on-device model with knowledge grounding
-// This demonstrates deep Cactus SDK integration and true edge AI capabilities
+// Result type for generateWithToolCalling
+interface ToolCallingResult {
+  response: string;
+  usedTools: boolean;
+  toolTopic?: string;
+  metrics?: PerformanceMetrics;
+}
+
+// Generate completion with tool calling support
+const generateWithToolCalling = async (
+  messages: ChatMessage[],
+  onToken: (token: string) => void,
+  context?: DeviceContext
+): Promise<ToolCallingResult> => {
+  const model = getModel();
+  if (!model || !isModelInitialized()) {
+    throw new Error('Model not loaded. Please initialize the model first.');
+  }
+
+  const formattedMessages = formatMessages(messages, context);
+
+  logger.debug('ToolCalling', 'Starting completion with tools');
+
+  // First call - may return function calls
+  const result = await model.complete({
+    messages: formattedMessages,
+    tools: SURVIVAL_TOOLS,
+    options: {
+      maxTokens: SMALL_MODEL_PARAMS.maxTokens,
+    },
+    onToken,
+  });
+
+  // Check if model wants to call a tool
+  if (result.functionCalls && result.functionCalls.length > 0) {
+    const functionCall = result.functionCalls[0];
+    logger.debug('ToolCalling', `Model requested tool: ${functionCall.name}`, functionCall.arguments);
+
+    // Execute the tool
+    const toolResult = executeTool(functionCall.name, functionCall.arguments);
+
+    if (toolResult) {
+      logger.debug('ToolCalling', 'Tool executed, continuing conversation');
+
+      // Add tool result to messages and continue
+      const toolResultMessage = formatToolResultForMessages(
+        functionCall.name,
+        functionCall.arguments,
+        toolResult
+      );
+
+      // Create updated messages with tool result
+      const messagesWithToolResult: CactusMessage[] = [
+        ...formattedMessages,
+        { role: 'assistant', content: result.response || 'Looking up information...' },
+        { role: 'user', content: toolResultMessage },
+      ];
+
+      // Second call with knowledge context
+      let finalResponse = '';
+      const finalResult = await model.complete({
+        messages: messagesWithToolResult,
+        options: {
+          maxTokens: SMALL_MODEL_PARAMS.maxTokens,
+        },
+        onToken: (token) => {
+          finalResponse += token;
+          onToken(token);
+        },
+      });
+
+      // Combine metrics from both calls
+      const metrics: PerformanceMetrics = {
+        tokensPerSecond: finalResult?.tokensPerSecond || 0,
+        timeToFirstTokenMs: result?.timeToFirstTokenMs || 0,
+        totalTimeMs: (result?.totalTimeMs || 0) + (finalResult?.totalTimeMs || 0),
+        totalTokens: (result?.totalTokens || 0) + (finalResult?.totalTokens || 0),
+      };
+
+      return {
+        response: finalResult?.response || finalResponse,
+        usedTools: true,
+        toolTopic: functionCall.arguments?.topic,
+        metrics,
+      };
+    }
+  }
+
+  // No tool call, return direct response with metrics
+  const metrics: PerformanceMetrics = {
+    tokensPerSecond: result?.tokensPerSecond || 0,
+    timeToFirstTokenMs: result?.timeToFirstTokenMs || 0,
+    totalTimeMs: result?.totalTimeMs || 0,
+    totalTokens: result?.totalTokens || 0,
+  };
+
+  return {
+    response: result?.response || '',
+    usedTools: false,
+    metrics,
+  };
+};
+
+// Check if the current model supports tool calling
+const currentModelSupportsToolCalling = (): boolean => {
+  const { currentModelId } = useModelStore.getState();
+  const modelConfig = CACTUS_MODELS[currentModelId];
+  return modelConfig?.supportsToolCalling ?? false;
+};
+
+// Generate a smart response - uses tool calling for capable models,
+// or direct knowledge injection for smaller models
 export const generateSmartResponse = async (
   messages: ChatMessage[],
   onToken: (token: string) => void,
@@ -194,15 +308,47 @@ export const generateSmartResponse = async (
     };
   }
 
-  // 1. Get relevant knowledge to inject as context (improves model accuracy)
-  const knowledgeEntries = searchKnowledge(lastUserMessage, 2);
-  const knowledgeContext = getRelevantKnowledge(lastUserMessage);
-
-  logger.debug('SmartResponse', 'Knowledge injected', knowledgeEntries.length > 0 ? 'Yes' : 'No');
-
-  // 2. ALWAYS generate response with on-device model
   let rawResponse = '';
-  try {
+  let usedTools = false;
+  let toolTopic: string | undefined;
+  let metrics: PerformanceMetrics | undefined;
+
+  // Check if current model supports tool calling
+  const supportsToolCalling = currentModelSupportsToolCalling();
+  logger.debug('SmartResponse', `Model supports tool calling: ${supportsToolCalling}`);
+
+  if (supportsToolCalling) {
+    // Use tool-calling approach for capable models
+    try {
+      const toolResult = await generateWithToolCalling(
+        messages,
+        (token) => {
+          rawResponse += token;
+          onToken(token);
+        },
+        context
+      );
+      rawResponse = toolResult.response || rawResponse;
+      usedTools = toolResult.usedTools;
+      toolTopic = toolResult.toolTopic;
+      metrics = toolResult.metrics;
+
+      logger.debug('SmartResponse', `Tool calling: ${usedTools ? 'Yes' : 'No'}`, toolTopic || 'N/A');
+      if (metrics) {
+        logger.debug('SmartResponse', `Performance: ${metrics.tokensPerSecond.toFixed(1)} tok/s, ${metrics.totalTokens} tokens`);
+      }
+    } catch (error) {
+      logger.error('SmartResponse', 'Tool-calling generation failed, falling back to knowledge injection', error);
+      // Fall through to knowledge injection
+      rawResponse = '';
+    }
+  }
+
+  // For models without tool calling (or if tool calling failed), use direct knowledge injection
+  if (!rawResponse) {
+    logger.debug('SmartResponse', 'Using direct knowledge injection');
+    const knowledgeContext = getRelevantKnowledge(lastUserMessage);
+
     const fullResponse = await generateStreamingCompletion(
       messages,
       (token) => {
@@ -212,24 +358,28 @@ export const generateSmartResponse = async (
       context
     );
     rawResponse = fullResponse || rawResponse;
-  } catch (error) {
-    logger.error('SmartResponse', 'Model generation failed', error);
-    throw error;
+
+    // Mark as knowledge-grounded if we injected knowledge
+    if (knowledgeContext) {
+      usedTools = true; // Treat knowledge injection as "grounded"
+    }
   }
 
-  // 3. Analyze response quality (for logging/debugging, not replacement)
+  // Analyze response quality
+  const knowledgeContext = getRelevantKnowledge(lastUserMessage);
   const quality = analyzeResponseQuality(rawResponse, knowledgeContext);
   logger.debug('SmartResponse', `Quality score: ${quality.score}`, quality.issues);
 
-  // 4. Check if we have related knowledge (for UI indicator only)
-  const hasKnowledgeGrounding = knowledgeEntries.length > 0;
+  // Get knowledge entry ID if knowledge was used
+  const knowledgeEntries = searchKnowledge(lastUserMessage, 1);
 
-  // 5. Return model response with metadata
   return {
     response: rawResponse,
-    source: hasKnowledgeGrounding ? 'knowledge-grounded' : 'model',
+    source: usedTools ? 'knowledge-grounded' : 'model',
     knowledgeEntryId: knowledgeEntries[0]?.id,
     qualityScore: quality.score,
+    usedToolCalling: supportsToolCalling && usedTools,
+    metrics,
   };
 };
 

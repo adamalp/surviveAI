@@ -12,6 +12,14 @@ export interface Conversation {
 // 'model' = pure model generation, 'knowledge-grounded' = model with knowledge injection
 export type ResponseSource = 'model' | 'knowledge-grounded';
 
+// Performance metrics from model inference
+export interface PerformanceMetrics {
+  tokensPerSecond: number;
+  timeToFirstTokenMs: number;
+  totalTimeMs: number;
+  totalTokens: number;
+}
+
 // Chat types
 export interface ChatMessage {
   id: string;
@@ -22,6 +30,7 @@ export interface ChatMessage {
   images?: string[]; // Array of image URIs for vision models
   source?: ResponseSource; // Where the response came from (model or knowledge-grounded)
   knowledgeEntryId?: string; // ID of knowledge entry used for grounding
+  metrics?: PerformanceMetrics; // Model inference performance metrics
 }
 
 // Model types

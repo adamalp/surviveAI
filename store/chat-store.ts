@@ -262,6 +262,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           timestamp: Date.now(),
           source: smartResult.source,
           knowledgeEntryId: smartResult.knowledgeEntryId,
+          metrics: smartResult.metrics,
         };
 
         set((state) => ({

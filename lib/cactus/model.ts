@@ -18,6 +18,7 @@ export const CACTUS_MODELS: Record<string, ModelConfig> = {
     quality: 1,
     speed: 5,
     supportsVision: false,
+    supportsToolCalling: false, // Too small for function calling
   },
   'qwen3-0.6': {
     id: 'qwen3-0.6',
@@ -27,6 +28,7 @@ export const CACTUS_MODELS: Record<string, ModelConfig> = {
     quality: 2,
     speed: 5,
     supportsVision: false,
+    supportsToolCalling: false, // Too small for function calling
   },
   'lfm2-vl-450m': {
     id: 'lfm2-vl-450m',
@@ -36,6 +38,7 @@ export const CACTUS_MODELS: Record<string, ModelConfig> = {
     quality: 3,
     speed: 4,
     supportsVision: true,
+    supportsToolCalling: false, // Too small for function calling
   },
   'smollm2-0.4': {
     id: 'smollm2-0.4',
@@ -45,6 +48,7 @@ export const CACTUS_MODELS: Record<string, ModelConfig> = {
     quality: 2,
     speed: 5,
     supportsVision: false,
+    supportsToolCalling: false, // Too small for function calling
   },
   'gemma3-1': {
     id: 'gemma3-1',
@@ -54,6 +58,7 @@ export const CACTUS_MODELS: Record<string, ModelConfig> = {
     quality: 3,
     speed: 4,
     supportsVision: false,
+    supportsToolCalling: false, // 1B models have limited function calling
   },
   'qwen3-1.7': {
     id: 'qwen3-1.7',
@@ -63,6 +68,7 @@ export const CACTUS_MODELS: Record<string, ModelConfig> = {
     quality: 4,
     speed: 3,
     supportsVision: false,
+    supportsToolCalling: true, // Qwen3 1.7B has good instruction following
   },
   'smollm2-1.7': {
     id: 'smollm2-1.7',
@@ -72,6 +78,7 @@ export const CACTUS_MODELS: Record<string, ModelConfig> = {
     quality: 4,
     speed: 3,
     supportsVision: false,
+    supportsToolCalling: true, // SmolLM2 1.7B has good instruction following
   },
 };
 
@@ -83,6 +90,7 @@ export interface ModelConfig {
   quality: number; // 1-5 rating
   speed: number;   // 1-5 rating
   supportsVision: boolean;
+  supportsToolCalling: boolean; // Whether model can properly execute function calls
 }
 
 export const DEFAULT_MODEL_ID = 'qwen3-0.6';
@@ -90,6 +98,15 @@ export const DEFAULT_MODEL_ID = 'qwen3-0.6';
 // Get or create the CactusLM instance
 export const getCactusLM = (modelId: string = DEFAULT_MODEL_ID): CactusLM => {
   if (!lmInstance || lmInstance['model'] !== modelId) {
+    // Destroy old instance before creating new one to release resources
+    if (lmInstance) {
+      try {
+        lmInstance.destroy();
+      } catch (e) {
+        console.warn('[CactusModel] Error destroying old instance:', e);
+      }
+      modelInitialized = false;
+    }
     lmInstance = new CactusLM({
       model: modelId,
       contextSize: 2048,
@@ -167,8 +184,40 @@ export const getModel = (): CactusLM | null => {
   return lmInstance;
 };
 
-// Unload the model
+// Unload the model - IMPORTANT: Always call destroy() to release resources
 export const unloadModel = (): void => {
+  if (lmInstance) {
+    try {
+      lmInstance.destroy();
+    } catch (e) {
+      console.warn('[CactusModel] Error destroying instance:', e);
+    }
+  }
   lmInstance = null;
   modelInitialized = false;
+};
+
+// Check if a model is downloaded
+export const isModelDownloaded = async (modelId: string): Promise<boolean> => {
+  try {
+    const lm = new CactusLM({ model: modelId, contextSize: 2048 });
+    // The SDK's download method typically returns immediately if already downloaded
+    // We can use the isDownloaded property if available, otherwise check via a quick download attempt
+    if ('isDownloaded' in lm && typeof (lm as any).isDownloaded === 'function') {
+      return await (lm as any).isDownloaded();
+    }
+    // Fallback: return false if we can't determine
+    return false;
+  } catch {
+    return false;
+  }
+};
+
+// Check all models for download status
+export const checkAllModelsDownloaded = async (): Promise<Record<string, boolean>> => {
+  const results: Record<string, boolean> = {};
+  for (const modelId of Object.keys(CACTUS_MODELS)) {
+    results[modelId] = await isModelDownloaded(modelId);
+  }
+  return results;
 };

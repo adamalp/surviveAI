@@ -17,6 +17,7 @@ interface ModelState {
   error: string | null;
   currentModelId: string;
   loadedModelId: string | null;
+  downloadedModels: string[]; // Track which models have been downloaded
 }
 
 interface ModelStore extends ModelState {
@@ -24,6 +25,7 @@ interface ModelStore extends ModelState {
   downloadAndLoad: (modelId?: string) => Promise<void>;
   unload: () => void;
   setError: (error: string | null) => void;
+  isModelDownloaded: (modelId: string) => boolean;
 }
 
 export const useModelStore = create<ModelStore>()(
@@ -36,6 +38,7 @@ export const useModelStore = create<ModelStore>()(
       error: null,
       currentModelId: DEFAULT_MODEL_ID,
       loadedModelId: null,
+      downloadedModels: [],
 
       // Select a model (doesn't download/load yet)
       selectModel: (modelId: string) => {
@@ -70,12 +73,19 @@ export const useModelStore = create<ModelStore>()(
           await initializeModel(targetModelId);
 
           console.log(`[ModelStore] Model initialized successfully!`);
+          // Add to downloaded models list if not already there
+          const { downloadedModels } = get();
+          const newDownloadedModels = downloadedModels.includes(targetModelId)
+            ? downloadedModels
+            : [...downloadedModels, targetModelId];
+
           set({
             isLoaded: true,
             isLoading: false,
             loadProgress: 1,
             currentModelId: targetModelId,
             loadedModelId: targetModelId,
+            downloadedModels: newDownloadedModels,
           });
         } catch (error) {
           console.error(`[ModelStore] Error:`, error);
@@ -105,11 +115,19 @@ export const useModelStore = create<ModelStore>()(
 
       // Set error state
       setError: (error) => set({ error }),
+
+      // Check if a model is downloaded
+      isModelDownloaded: (modelId: string) => {
+        return get().downloadedModels.includes(modelId);
+      },
     }),
     {
       name: 'model-store',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => ({ currentModelId: state.currentModelId }),
+      partialize: (state) => ({
+        currentModelId: state.currentModelId,
+        downloadedModels: state.downloadedModels,
+      }),
       // Validate persisted model ID - reset to default if invalid
       onRehydrateStorage: () => (state) => {
         if (state && state.currentModelId && !CACTUS_MODELS[state.currentModelId]) {

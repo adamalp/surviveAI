@@ -22,6 +22,7 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { useTheme } from '@/contexts/ThemeContext';
 import { useChatStore, useDeviceStore, useModelStore } from '@/store';
+import { useSTTStore } from '@/store/stt-store';
 import { ChatMessage, Conversation } from '@/types';
 import { CACTUS_MODELS } from '@/lib/cactus/model';
 import { CONFIG } from '@/constants/config';
@@ -49,6 +50,12 @@ export default function AssistantScreen() {
 
   const { getDeviceContext, updateLocation, updateBattery } = useDeviceStore();
   const { currentModelId, isLoaded } = useModelStore();
+  const {
+    isRecording,
+    isTranscribing,
+    startRecording,
+    stopRecording,
+  } = useSTTStore();
 
   // Check if current model supports vision
   const currentModel = CACTUS_MODELS[currentModelId];
@@ -153,6 +160,24 @@ export default function AssistantScreen() {
   // Clear selected image
   const clearImage = () => {
     setSelectedImage(null);
+  };
+
+  // Handle voice input toggle
+  const handleVoiceInput = async () => {
+    if (isGenerating) return;
+
+    try {
+      if (isRecording) {
+        const text = await stopRecording();
+        if (text && text.trim()) {
+          setInput(text.trim());
+        }
+      } else {
+        await startRecording();
+      }
+    } catch (err) {
+      console.error('Voice input error:', err);
+    }
   };
 
   const handleNewChat = () => {
@@ -369,7 +394,7 @@ export default function AssistantScreen() {
                 />
               ))}
 
-              {/* Streaming response */}
+              {/* Streaming response - use plain Text during streaming to avoid markdown parsing issues */}
               {isGenerating && (
                 <View
                   style={[
@@ -379,9 +404,9 @@ export default function AssistantScreen() {
                   ]}
                 >
                   {currentResponse ? (
-                    <Markdown style={markdownStyles}>
+                    <Text style={[styles.streamingText, { color: colors.text }]}>
                       {currentResponse}
-                    </Markdown>
+                    </Text>
                   ) : (
                     <View style={styles.thinkingContainer}>
                       <ActivityIndicator size="small" color={colors.accent} />
@@ -422,60 +447,74 @@ export default function AssistantScreen() {
           </View>
         )}
 
-        {/* Input Area */}
-        <View
-          style={[
-            styles.inputContainer,
-            { backgroundColor: colors.backgroundSecondary, borderTopColor: colors.border },
-          ]}
-        >
-          {/* Image buttons */}
+        {/* Recording indicator */}
+        {isRecording && (
+          <View style={[styles.recordingIndicator, { backgroundColor: colors.danger }]}>
+            <View style={styles.recordingDot} />
+            <Text style={styles.recordingText}>Recording...</Text>
+          </View>
+        )}
+
+        {/* Transcribing indicator */}
+        {isTranscribing && (
+          <View style={[styles.recordingIndicator, { backgroundColor: colors.accent }]}>
+            <ActivityIndicator size="small" color="#FFFFFF" />
+            <Text style={styles.recordingText}>Transcribing...</Text>
+          </View>
+        )}
+
+        {/* Input Area - Clean modern design */}
+        <View style={[styles.inputContainer, { backgroundColor: colors.background }]}>
+          {/* Add attachment button */}
           <TouchableOpacity
-            style={[styles.imageButton, { backgroundColor: colors.backgroundTertiary }]}
+            style={[styles.addButton, { backgroundColor: colors.backgroundTertiary }]}
             onPress={pickImage}
             disabled={isGenerating}
           >
-            <Ionicons
-              name="image-outline"
-              size={22}
-              color={supportsVision ? colors.accent : colors.textMuted}
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.imageButton, { backgroundColor: colors.backgroundTertiary }]}
-            onPress={takePhoto}
-            disabled={isGenerating}
-          >
-            <Ionicons
-              name="camera-outline"
-              size={22}
-              color={supportsVision ? colors.accent : colors.textMuted}
-            />
+            <Ionicons name="add" size={24} color={colors.textSecondary} />
           </TouchableOpacity>
 
-          <TextInput
-            style={[
-              styles.input,
-              {
-                backgroundColor: colors.inputBackground,
-                borderColor: colors.border,
-                color: colors.text,
-              },
-            ]}
-            value={input}
-            onChangeText={setInput}
-            placeholder={selectedImage ? "Ask about this image..." : "Ask a survival question..."}
-            placeholderTextColor={colors.textMuted}
-            multiline
-            maxLength={1000}
-            editable={!isGenerating}
-            onSubmitEditing={handleSend}
-            blurOnSubmit={false}
-          />
+          {/* Input pill container */}
+          <View style={[styles.inputPill, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}>
+            <TextInput
+              style={[styles.input, { color: colors.text }]}
+              value={input}
+              onChangeText={setInput}
+              placeholder={selectedImage ? "Ask about this image..." : "Ask anything"}
+              placeholderTextColor={colors.textMuted}
+              multiline
+              maxLength={1000}
+              editable={!isGenerating}
+              onSubmitEditing={handleSend}
+              blurOnSubmit={false}
+            />
+
+            {/* Mic button inside input */}
+            <TouchableOpacity
+              style={[
+                styles.micButton,
+                isRecording && { backgroundColor: colors.danger, borderRadius: 12 },
+              ]}
+              onPress={handleVoiceInput}
+              disabled={isGenerating || isTranscribing}
+            >
+              {isTranscribing ? (
+                <ActivityIndicator size="small" color={colors.textMuted} />
+              ) : (
+                <Ionicons
+                  name={isRecording ? 'stop' : 'mic-outline'}
+                  size={22}
+                  color={isRecording ? '#FFFFFF' : colors.textMuted}
+                />
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Send button */}
           <TouchableOpacity
             style={[
               styles.sendButton,
-              { backgroundColor: (!input.trim() && !selectedImage) || isGenerating ? colors.border : colors.accent },
+              { backgroundColor: (!input.trim() && !selectedImage) || isGenerating ? colors.textMuted : '#000000' },
             ]}
             onPress={handleSend}
             disabled={(!input.trim() && !selectedImage) || isGenerating}
@@ -654,6 +693,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+  streamingText: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -713,25 +756,42 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    padding: 12,
-    borderTopWidth: 0,
-    gap: 8,
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  addButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  inputPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 44,
+    maxHeight: 120,
+    borderRadius: 22,
+    borderWidth: 1,
+    paddingLeft: 16,
+    paddingRight: 8,
   },
   input: {
     flex: 1,
-    minHeight: 36,
-    maxHeight: 120,
-    borderRadius: 20,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
     fontSize: 16,
+    paddingVertical: 10,
+    maxHeight: 100,
+  },
+  micButton: {
+    padding: 8,
   },
   sendButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -874,5 +934,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8,
+  },
+  recordingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 8,
+    gap: 8,
+  },
+  recordingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FFFFFF',
+  },
+  recordingText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
